@@ -84,10 +84,10 @@ export const DashboardPage: React.FC = () => {
 
         {/* =========================================================================
             HERO CARD: NEEDS YOU FIRST
-            Light mode: Black bg, Ivory text, Pink highlight (#ff8fa3)
-            Dark mode: Ivory bg (#f5f4f2), Black text, Darker pink highlight (#d6336c)
+            Light mode: Light black bg (#222226), Ivory text (#f5f4f2), Light pink highlight (#ff8fa3)
+            Dark mode: Ivory bg (#f5f4f2), Light black text (#222226), Darker pink highlight (#d6336c)
             ========================================================================= */}
-        <div className="rounded-2xl bg-black dark:bg-[#f5f4f2] text-[#f5f4f2] dark:text-black p-5 sm:p-6 lg:p-7 border border-neutral-800 dark:border-neutral-300 shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 transition-colors duration-200">
+        <div className="rounded-2xl bg-[#222226] dark:bg-[#f5f4f2] text-[#f5f4f2] dark:text-[#222226] p-5 sm:p-6 lg:p-7 border border-[#323238] dark:border-neutral-300 shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 transition-colors duration-200">
           <div className="space-y-2.5 max-w-lg z-10 text-left">
             <div className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase text-neutral-400 dark:text-neutral-600">
               <span className="w-2 h-2 rounded-full bg-[#ff8fa3] dark:bg-[#d6336c]" />
@@ -98,7 +98,7 @@ export const DashboardPage: React.FC = () => {
               ATTEND <span className="text-[#ff8fa3] dark:text-[#d6336c]">1 MORE CLASS</span> IN COMPUTER NETWORKS.
             </h2>
 
-            <p className="text-xs text-neutral-400 dark:text-neutral-600 font-medium leading-relaxed max-w-md">
+            <p className="text-xs text-neutral-300 dark:text-neutral-600 font-medium leading-relaxed max-w-md">
               You're at 74.4%, just under the 75% line. Today's 2:00 PM lecture takes you back to exactly 75.0%.
             </p>
 
@@ -106,7 +106,7 @@ export const DashboardPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/attendance')}
-                className="px-4 py-2 rounded-full bg-[#f5f4f2] dark:bg-black text-black dark:text-[#f5f4f2] font-extrabold text-xs flex items-center gap-1.5 cursor-pointer hover:bg-white dark:hover:bg-neutral-800 transition shadow-xs"
+                className="px-4 py-2 rounded-full bg-[#f5f4f2] dark:bg-[#222226] text-[#222226] dark:text-[#f5f4f2] font-extrabold text-xs flex items-center gap-1.5 cursor-pointer hover:bg-white dark:hover:bg-neutral-800 transition shadow-xs"
               >
                 <span>Open calculator</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -115,7 +115,7 @@ export const DashboardPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/attendance')}
-                className="px-4 py-2 rounded-full border border-neutral-700 dark:border-neutral-400 text-neutral-300 dark:text-neutral-800 font-extrabold text-xs hover:border-neutral-500 hover:text-white dark:hover:border-black dark:hover:text-black transition cursor-pointer"
+                className="px-4 py-2 rounded-full border border-neutral-600 dark:border-neutral-400 text-neutral-300 dark:text-neutral-800 font-extrabold text-xs hover:border-neutral-400 hover:text-white dark:hover:border-black dark:hover:text-black transition cursor-pointer"
               >
                 See recovery plan
               </button>
@@ -131,7 +131,7 @@ export const DashboardPage: React.FC = () => {
                   cx="50"
                   cy="50"
                   r="40"
-                  className="stroke-neutral-800 dark:stroke-neutral-300"
+                  className="stroke-[#333339] dark:stroke-neutral-300"
                   strokeWidth="8"
                   fill="transparent"
                 />
@@ -149,7 +149,7 @@ export const DashboardPage: React.FC = () => {
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="font-montserrat font-black text-lg sm:text-xl tracking-tight text-[#f5f4f2] dark:text-black leading-none">
+                <span className="font-montserrat font-black text-lg sm:text-xl tracking-tight text-[#f5f4f2] dark:text-[#222226] leading-none">
                   74.4%
                 </span>
                 <span className="text-[9px] font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider font-bold mt-1">
@@ -161,7 +161,7 @@ export const DashboardPage: React.FC = () => {
             {/* Skips list */}
             <div className="space-y-2 text-left">
               <div>
-                <span className="font-montserrat font-black text-xl text-[#f5f4f2] dark:text-black block leading-none">
+                <span className="font-montserrat font-black text-xl text-[#f5f4f2] dark:text-[#222226] block leading-none">
                   5
                 </span>
                 <span className="text-[10px] text-neutral-400 dark:text-neutral-600 font-medium">
@@ -169,7 +169,7 @@ export const DashboardPage: React.FC = () => {
                 </span>
               </div>
               <div>
-                <span className="font-montserrat font-black text-xl text-[#f5f4f2] dark:text-black block leading-none">
+                <span className="font-montserrat font-black text-xl text-[#f5f4f2] dark:text-[#222226] block leading-none">
                   3
                 </span>
                 <span className="text-[10px] text-neutral-400 dark:text-neutral-600 font-medium">
