@@ -15,9 +15,6 @@ export const NotFoundPage: React.FC = () => {
           onClick={() => navigate('/dashboard')}
           className="flex items-center gap-3 cursor-pointer"
         >
-          <div className="w-8 h-8 rounded-xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] flex items-center justify-center font-black text-xs">
-            cc
-          </div>
           <span className="font-montserrat font-black text-xs tracking-tight uppercase">
             CampusConnect
           </span>

@@ -74,12 +74,9 @@ export const RegisterPage: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="flex items-center gap-2.5 text-[var(--app-text)] hover:opacity-80 font-extrabold text-sm transition-opacity cursor-pointer group"
+          className="flex items-center gap-1.5 text-[var(--app-text)] hover:opacity-80 font-extrabold text-sm transition-opacity cursor-pointer group"
           aria-label="Back to Sign in"
         >
-          <div className="w-8 h-8 rounded-lg bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] flex items-center justify-center font-black text-xs">
-            cc
-          </div>
           <span className="flex items-center gap-1 text-xs sm:text-sm font-bold text-[var(--app-text-muted)] group-hover:text-[var(--app-text)]">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             Back to Sign in

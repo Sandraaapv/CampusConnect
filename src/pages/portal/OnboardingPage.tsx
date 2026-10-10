@@ -44,9 +44,6 @@ export const OnboardingPage: React.FC = () => {
       {/* Header */}
       <header className="max-w-3xl w-full mx-auto flex items-center justify-between py-4 border-b border-[var(--app-border)]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] flex items-center justify-center font-black text-xs">
-            cc
-          </div>
           <span className="font-montserrat font-black text-xs tracking-tight uppercase">
             CampusConnect Setup
           </span>

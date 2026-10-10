@@ -62,21 +62,18 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, title, 
       <aside className="hidden md:flex flex-col justify-between w-20 lg:w-64 shrink-0 bg-[var(--app-surface)] border-r border-[var(--app-border)] sticky top-0 h-screen z-30 transition-all duration-200">
         <div>
           {/* Logo Brand Header */}
-          <div className="h-16 flex items-center px-4 lg:px-6 border-b border-[var(--app-border)] gap-3">
+          <div className="h-16 flex items-center px-4 lg:px-6 border-b border-[var(--app-border)]">
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="flex items-center gap-3 cursor-pointer group"
+              className="flex items-center cursor-pointer group"
               aria-label="CampusConnect Home"
             >
-              <div className="w-9 h-9 rounded-xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] flex items-center justify-center font-black text-sm group-hover:scale-105 transition-transform shadow-2xs">
-                cc
-              </div>
-              <div className="hidden lg:flex flex-col text-left">
-                <span className="portal-heading text-sm tracking-tight text-[var(--app-text)]">
+              <div className="flex flex-col text-left">
+                <span className="portal-heading text-xs lg:text-sm tracking-tight text-[var(--app-text)]">
                   CampusConnect
                 </span>
-                <span className="text-[10px] font-bold tracking-wider uppercase text-[var(--accent-yellow)]">
+                <span className="text-[9px] lg:text-[10px] font-bold tracking-wider uppercase text-[var(--accent-yellow)]">
                   Student Portal
                 </span>
               </div>
