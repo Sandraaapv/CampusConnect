@@ -72,6 +72,28 @@ export interface UserSettings {
   attendanceThreshold: number;
 }
 
+export interface PastSubjectRecord {
+  code: string;
+  name: string;
+  credits: number;
+  grade: string;
+  gradePoints: number;
+  isArrear?: boolean;
+}
+
+export interface PastSemesterRecord {
+  semester: number;
+  term: string;
+  sgpa: number;
+  cumulativeCgpa: number;
+  totalCredits: number;
+  subjects: PastSubjectRecord[];
+}
+
+export interface AcademicHistoryConfig {
+  arrearsCountedInCredits: boolean; // default true (college rule)
+}
+
 // ============================================================================
 // CONFIGURABLE COLLEGE ASSESSMENT & ATTENDANCE FORMULAS
 // ============================================================================
@@ -565,4 +587,149 @@ export function buildStudyPlan(
     isConstrained: atRiskSubjects.length > 0,
     totalAllocatedHours: Number(totalAllocatedHours.toFixed(1)),
   };
+}
+
+// ============================================================================
+// ACADEMIC HISTORY (READ-ONLY FROM COLLEGE RECORDS)
+// ============================================================================
+
+export const ALL_HISTORICAL_SEMESTERS: Record<number, PastSubjectRecord[]> = {
+  1: [
+    { code: 'MA1101', name: 'Linear Algebra & Calculus', credits: 4, grade: 'A+', gradePoints: 9 },
+    { code: 'PH1101', name: 'Engineering Physics', credits: 3, grade: 'A', gradePoints: 8 },
+    { code: 'CS1101', name: 'Problem Solving & Python Programming', credits: 4, grade: 'O', gradePoints: 10 },
+    { code: 'GE1101', name: 'Engineering Graphics & CAD', credits: 3, grade: 'A', gradePoints: 8 },
+    { code: 'CY1101', name: 'Engineering Chemistry', credits: 3, grade: 'B+', gradePoints: 7 },
+    { code: 'CS1181', name: 'Python Programming Laboratory', credits: 2, grade: 'O', gradePoints: 10 },
+  ],
+  2: [
+    { code: 'MA1201', name: 'Transforms & Partial Differential Equations', credits: 4, grade: 'A', gradePoints: 8 },
+    { code: 'CS1201', name: 'Programming in C & Data Structures', credits: 4, grade: 'A+', gradePoints: 9 },
+    { code: 'EE1201', name: 'Basic Electrical & Electronics Engineering', credits: 3, grade: 'B+', gradePoints: 7 },
+    { code: 'CS1202', name: 'Digital Principles & System Design', credits: 3, grade: 'A', gradePoints: 8 },
+    { code: 'EN1201', name: 'Technical English & Professional Communication', credits: 2, grade: 'A+', gradePoints: 9 },
+    { code: 'CS1281', name: 'C Programming & Data Structures Lab', credits: 2, grade: 'O', gradePoints: 10 },
+    { code: 'EE1281', name: 'Electrical & Electronics Engineering Lab', credits: 2, grade: 'A', gradePoints: 8 },
+  ],
+  3: [
+    { code: 'MA2101', name: 'Discrete Mathematics & Graph Theory', credits: 4, grade: 'A', gradePoints: 8 },
+    { code: 'CS2101', name: 'Object Oriented Programming (Java)', credits: 3, grade: 'O', gradePoints: 10 },
+    { code: 'CS2102', name: 'Computer Architecture & Organization', credits: 4, grade: 'B+', gradePoints: 7 },
+    { code: 'CS2103', name: 'Data Structures & Advanced Algorithms', credits: 4, grade: 'A+', gradePoints: 9 },
+    { code: 'CS2104', name: 'Software Engineering Fundamentals', credits: 3, grade: 'A', gradePoints: 8 },
+    { code: 'CS2181', name: 'Java & Object Technologies Laboratory', credits: 2, grade: 'O', gradePoints: 10 },
+  ],
+  4: [
+    { code: 'MA2201', name: 'Probability, Statistics & Queuing Theory', credits: 4, grade: 'B+', gradePoints: 7 },
+    { code: 'CS2201', name: 'Database Management Systems', credits: 4, grade: 'A+', gradePoints: 9 },
+    { code: 'CS2202', name: 'Design & Analysis of Algorithms', credits: 4, grade: 'A', gradePoints: 8 },
+    { code: 'CS2203', name: 'Operating Systems Principles', credits: 3, grade: 'B+', gradePoints: 7 },
+    { code: 'CS2204', name: 'Environmental Science & Sustainability', credits: 2, grade: 'A', gradePoints: 8 },
+    { code: 'CS2281', name: 'DBMS & Algorithm Design Lab', credits: 2, grade: 'A+', gradePoints: 9 },
+  ],
+  5: [
+    { code: 'CS3101', name: 'Theory of Computation & Automata', credits: 4, grade: 'A', gradePoints: 8 },
+    { code: 'CS3102', name: 'Computer Networks & Internet Protocols', credits: 4, grade: 'A+', gradePoints: 9 },
+    { code: 'CS3103', name: 'Microprocessors & Embedded Interfacing', credits: 3, grade: 'B+', gradePoints: 7 },
+    { code: 'CS3104', name: 'Web Technologies & Full-Stack Development', credits: 3, grade: 'O', gradePoints: 10 },
+    { code: 'CS3105', name: 'Professional Ethics in Engineering', credits: 2, grade: 'A+', gradePoints: 9 },
+    { code: 'CS3181', name: 'Computer Networks & Web Applications Lab', credits: 2, grade: 'O', gradePoints: 10 },
+    { code: 'CS3182', name: 'Mini Project & Technical Seminar', credits: 2, grade: 'A+', gradePoints: 9 },
+  ],
+};
+
+function generateFallbackSemesterSubjects(sem: number): PastSubjectRecord[] {
+  return [
+    { code: `CS${sem}01`, name: `Core Advanced Elective I (Sem ${sem})`, credits: 4, grade: 'A', gradePoints: 8 },
+    { code: `CS${sem}02`, name: `Professional Elective II (Sem ${sem})`, credits: 4, grade: 'A+', gradePoints: 9 },
+    { code: `CS${sem}03`, name: `Open Elective Domain (Sem ${sem})`, credits: 3, grade: 'B+', gradePoints: 7 },
+    { code: `CS${sem}04`, name: `Emerging Technologies Specialization`, credits: 3, grade: 'O', gradePoints: 10 },
+    { code: `CS${sem}81`, name: `Specialized Domain Laboratory`, credits: 2, grade: 'A+', gradePoints: 9 },
+  ];
+}
+
+/**
+ * Generic academic history seed generator:
+ * For a student in semester `currentSemester`, returns complete history for all completed
+ * earlier semesters (1 to currentSemester - 1).
+ */
+export function getAcademicHistoryForStudent(
+  currentSemester: number,
+  config: AcademicHistoryConfig = { arrearsCountedInCredits: true }
+): PastSemesterRecord[] {
+  if (currentSemester <= 1) return [];
+
+  const maxCompleted = currentSemester - 1;
+  const history: PastSemesterRecord[] = [];
+
+  let accumulatedGradePoints = 0;
+  let accumulatedCredits = 0;
+
+  for (let sem = 1; sem <= maxCompleted; sem++) {
+    const semSubjects = ALL_HISTORICAL_SEMESTERS[sem] || generateFallbackSemesterSubjects(sem);
+
+    let semPoints = 0;
+    let semCredits = 0;
+
+    semSubjects.forEach((sub) => {
+      const isFailed = Boolean(sub.isArrear || sub.grade === 'RA' || sub.grade === 'F' || sub.grade === 'U');
+      const countsInCredits = !isFailed || config.arrearsCountedInCredits;
+      if (countsInCredits) {
+        semCredits += sub.credits;
+      }
+      semPoints += sub.credits * sub.gradePoints;
+    });
+
+    const sgpa = semCredits > 0 ? Number((semPoints / semCredits).toFixed(2)) : 0;
+
+    accumulatedGradePoints += semPoints;
+    accumulatedCredits += semCredits;
+
+    const cumulativeCgpa =
+      accumulatedCredits > 0
+        ? Number((accumulatedGradePoints / accumulatedCredits).toFixed(2))
+        : 0;
+
+    const term = sem % 2 === 1 ? `Fall Semester (Odd)` : `Spring Semester (Even)`;
+
+    history.push({
+      semester: sem,
+      term,
+      sgpa,
+      cumulativeCgpa,
+      totalCredits: semCredits,
+      subjects: semSubjects.map((s) => ({
+        ...s,
+        isArrear: Boolean(s.isArrear || s.grade === 'RA' || s.grade === 'F' || s.grade === 'U'),
+      })),
+    });
+  }
+
+  return history;
+}
+
+/**
+ * Calculates cumulative CGPA across all completed semesters:
+ * CGPA = total grade points across all completed semesters / total credits
+ */
+export function calculateCumulativeCgpa(
+  history: PastSemesterRecord[],
+  config: AcademicHistoryConfig = { arrearsCountedInCredits: true }
+): number {
+  if (!history || history.length === 0) return 0;
+  let totalPoints = 0;
+  let totalCredits = 0;
+
+  history.forEach((sem) => {
+    sem.subjects.forEach((sub) => {
+      const isFailed = Boolean(sub.isArrear || sub.grade === 'RA' || sub.grade === 'F' || sub.grade === 'U');
+      const countsInCredits = !isFailed || config.arrearsCountedInCredits;
+      if (countsInCredits) {
+        totalCredits += sub.credits;
+      }
+      totalPoints += sub.credits * sub.gradePoints;
+    });
+  });
+
+  return totalCredits > 0 ? Number((totalPoints / totalCredits).toFixed(2)) : 0;
 }

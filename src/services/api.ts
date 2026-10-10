@@ -39,6 +39,14 @@ export const api = {
     return db.predictEndSemMarks(targetCgpa);
   },
 
+  async getAcademicHistory() {
+    return db.getAcademicHistory();
+  },
+
+  async getCumulativeCgpa() {
+    return db.getCumulativeCgpa();
+  },
+
   // --- Student Settings Endpoints (GET / PUT /settings) ---
   async getSettings() {
     return db.getUser().settings;

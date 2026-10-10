@@ -9,8 +9,18 @@ import {
   calculateSafeSkips,
   calculateClassesToRecover,
   buildStudyPlan,
+  getAcademicHistoryForStudent,
+  calculateCumulativeCgpa,
 } from './collegeRecords';
-import type { SyllabusUnit, StudyPlanResult } from './collegeRecords';
+import type {
+  SyllabusUnit,
+  StudyPlanResult,
+  PastSubjectRecord,
+  PastSemesterRecord,
+  AcademicHistoryConfig,
+} from './collegeRecords';
+
+export type { PastSubjectRecord, PastSemesterRecord, AcademicHistoryConfig };
 
 export interface StudentSettings {
   attendanceThreshold: number; // default 75
@@ -865,6 +875,16 @@ class StudentPortalDB {
   public updateMark(_subjectId: string, _updates: Partial<MarkRecord>) {
     console.warn('[CollegeRecords] Modification of official internal assessment marks is rejected.');
     return { error: 'Read-only college records: student write rejected.' };
+  }
+
+  // --- Academic History (Read-Only from College Records) ---
+  public getAcademicHistory(config?: AcademicHistoryConfig): PastSemesterRecord[] {
+    return getAcademicHistoryForStudent(this.user.semester, config);
+  }
+
+  public getCumulativeCgpa(config?: AcademicHistoryConfig): number {
+    const history = this.getAcademicHistory(config);
+    return calculateCumulativeCgpa(history, config);
   }
 
   // --- Syllabus Units & Student Progress ---

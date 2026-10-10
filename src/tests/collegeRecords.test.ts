@@ -5,6 +5,8 @@ import {
   computeCollegeTotalInternal,
   buildStudyPlan,
   INITIAL_STUDENT_UNIT_PROGRESS,
+  getAcademicHistoryForStudent,
+  calculateCumulativeCgpa,
 } from '../services/collegeRecords';
 
 describe('College Records & Academic Calculations', () => {
@@ -103,6 +105,92 @@ describe('College Records & Academic Calculations', () => {
 
       // Ticking units should change remaining hours or scheduled units
       expect(newPlan.totalAllocatedHours).toBeLessThanOrEqual(originalPlan.totalAllocatedHours);
+    });
+  });
+
+  describe('Academic History (College Records - Read Only)', () => {
+    it('seeds history for every completed semester (1 to currentSemester - 1)', () => {
+      // Demo student is in Semester 6: should have Semesters 1, 2, 3, 4, 5
+      const history = getAcademicHistoryForStudent(6);
+      expect(history.length).toBe(5);
+      expect(history.map((s) => s.semester)).toEqual([1, 2, 3, 4, 5]);
+
+      // Verify each semester has subjects, credits, and SGPA
+      history.forEach((sem) => {
+        expect(sem.subjects.length).toBeGreaterThan(0);
+        expect(sem.totalCredits).toBeGreaterThan(0);
+        expect(sem.sgpa).toBeGreaterThan(0);
+        expect(sem.cumulativeCgpa).toBeGreaterThan(0);
+      });
+    });
+
+    it('is generic so a student in any semester gets all their earlier ones', () => {
+      // Semester 1: no earlier completed semesters
+      expect(getAcademicHistoryForStudent(1)).toHaveLength(0);
+
+      // Semester 2: gets semester 1
+      const sem2Student = getAcademicHistoryForStudent(2);
+      expect(sem2Student).toHaveLength(1);
+      expect(sem2Student[0].semester).toBe(1);
+
+      // Semester 4: gets semesters 1, 2, 3
+      const sem4Student = getAcademicHistoryForStudent(4);
+      expect(sem4Student).toHaveLength(3);
+      expect(sem4Student.map((s) => s.semester)).toEqual([1, 2, 3]);
+
+      // Semester 8: gets semesters 1 through 7
+      const sem8Student = getAcademicHistoryForStudent(8);
+      expect(sem8Student).toHaveLength(7);
+      expect(sem8Student.map((s) => s.semester)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    it('calculates CGPA cumulatively across all completed semesters (not just most recent)', () => {
+      const history = getAcademicHistoryForStudent(6);
+      const cgpa = calculateCumulativeCgpa(history);
+
+      // Manual verification:
+      // Sem 1: 19 cr, 165 pts
+      // Sem 2: 20 cr, 167 pts
+      // Sem 3: 20 cr, 170 pts
+      // Sem 4: 19 cr, 151 pts
+      // Sem 5: 20 cr, 175 pts
+      // Total: 98 cr, 828 pts => 828 / 98 = 8.4489... => 8.45
+      expect(cgpa).toBe(8.45);
+
+      // Cumulative CGPA in the 5th semester record matches overall cumulative CGPA
+      expect(history[4].cumulativeCgpa).toBe(8.45);
+    });
+
+    it('includes arrears according to configurable college rule', () => {
+      // Create a mock semester history with an arrear subject
+      const mockHistory = [
+        {
+          semester: 1,
+          term: 'Fall',
+          sgpa: 6.0,
+          cumulativeCgpa: 6.0,
+          totalCredits: 10,
+          subjects: [
+            { code: 'CS101', name: 'Intro CS', credits: 4, grade: 'A', gradePoints: 8 }, // 32 pts
+            { code: 'MA101', name: 'Calculus', credits: 4, grade: 'B', gradePoints: 6 }, // 24 pts
+            { code: 'PH101', name: 'Physics', credits: 2, grade: 'RA', gradePoints: 0, isArrear: true }, // 0 pts
+          ],
+        },
+      ];
+
+      // Rule: Arrears included in credits denominator (Standard college rule)
+      // Total pts = 32 + 24 + 0 = 56. Total credits = 4 + 4 + 2 = 10. CGPA = 56 / 10 = 5.60
+      const cgpaWithArrearsInCredits = calculateCumulativeCgpa(mockHistory, {
+        arrearsCountedInCredits: true,
+      });
+      expect(cgpaWithArrearsInCredits).toBe(5.6);
+
+      // Rule: Arrears excluded from credits denominator until cleared
+      // Total pts = 56. Total credits = 4 + 4 = 8. CGPA = 56 / 8 = 7.00
+      const cgpaWithoutArrearsInCredits = calculateCumulativeCgpa(mockHistory, {
+        arrearsCountedInCredits: false,
+      });
+      expect(cgpaWithoutArrearsInCredits).toBe(7.0);
     });
   });
 });
