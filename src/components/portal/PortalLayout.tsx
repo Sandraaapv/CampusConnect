@@ -184,7 +184,7 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
                       aria-current={isActive ? 'page' : undefined}
                       className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-full font-bold text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white ${
                         isActive
-                          ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs font-black'
+                          ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] shadow-xs font-black'
                           : 'text-neutral-600 dark:text-neutral-400 hover:text-[var(--app-text)] hover:bg-[var(--app-surface-subtle)]'
                       }`}
                     >
@@ -219,7 +219,7 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
               aria-current={currentPath === '/settings' ? 'page' : undefined}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-full font-bold text-xs transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white ${
                 currentPath === '/settings'
-                  ? 'bg-black text-white dark:bg-white dark:text-black font-black'
+                  ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black'
                   : 'text-neutral-600 dark:text-neutral-400 hover:text-[var(--app-text)] hover:bg-[var(--app-surface-subtle)]'
               }`}
             >

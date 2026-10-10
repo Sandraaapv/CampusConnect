@@ -318,7 +318,7 @@ export const DashboardPage: React.FC = () => {
                   className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition cursor-pointer shadow-xs ${
                     markedOS
                       ? 'bg-[#00c98d] text-black font-black flex items-center gap-1'
-                      : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                      : 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:opacity-90'
                   }`}
                 >
                   {markedOS ? (
