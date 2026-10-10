@@ -30,9 +30,11 @@ import { SettingsPage } from './pages/portal/SettingsPage';
 import { OnboardingPage } from './pages/portal/OnboardingPage';
 import { NotFoundPage } from './pages/portal/NotFoundPage';
 
-// Section 1-6 New Student Portal Pages
 import { TimetablePage } from './pages/portal/TimetablePage';
 import { FeesPage } from './pages/portal/FeesPage';
+import { FeesPayPage } from './pages/portal/FeesPayPage';
+import { CheckoutPage } from './pages/portal/CheckoutPage';
+import { PaymentResultPage } from './pages/portal/PaymentResultPage';
 import { FacultyPage } from './pages/portal/FacultyPage';
 import { FeedbackPage } from './pages/portal/FeedbackPage';
 import { HelpdeskPage } from './pages/portal/HelpdeskPage';
@@ -199,6 +201,30 @@ export function App() {
     return (
       <ProtectedRoute>
         <FeesPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/fees/pay') {
+    return (
+      <ProtectedRoute>
+        <FeesPayPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath.startsWith('/fees/pay/') && currentPath.endsWith('/result')) {
+    return (
+      <ProtectedRoute>
+        <PaymentResultPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath.startsWith('/fees/pay/')) {
+    return (
+      <ProtectedRoute>
+        <CheckoutPage />
       </ProtectedRoute>
     );
   }

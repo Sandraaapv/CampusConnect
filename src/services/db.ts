@@ -25,9 +25,10 @@ import {
   SEED_HELPDESK_COMMENTS,
   getFeeStatus,
   generateIcsCalendar,
-  COLLEGE_PAYMENT_PORTAL_URL,
+  COLLEGE_PAYMENT_URL,
   SEMESTER_6_FEE_DUE_DATE,
 } from './collegeRecords';
+import type { PaymentOrder, PaymentAttempt, PaymentEvent } from './paymentService';
 import type {
   SyllabusUnit,
   StudyPlanResult,
@@ -259,6 +260,7 @@ export interface Notification {
     | 'class_changed'
     | 'fee_due'
     | 'fee_overdue'
+    | 'fee_paid'
     | 'feedback_closing'
     | 'helpdesk_update';
   title: string;
@@ -750,6 +752,11 @@ const STORAGE_KEYS = {
   FEEDBACK_SUBMISSIONS: 'campusconnect_feedback_submissions_v2',
   HELPDESK_TICKETS: 'campusconnect_helpdesk_tickets_v2',
   HELPDESK_COMMENTS: 'campusconnect_helpdesk_comments_v2',
+  FEE_PAYMENTS: 'campusconnect_fee_payments_v2',
+  FEE_RECEIPTS: 'campusconnect_fee_receipts_v2',
+  PAYMENT_ORDERS: 'campusconnect_payment_orders_v2',
+  PAYMENT_ATTEMPTS: 'campusconnect_payment_attempts_v2',
+  PAYMENT_EVENTS: 'campusconnect_payment_events_v2',
   SEEDED: 'campusconnect_portal_seeded_v3',
 };
 
@@ -770,6 +777,11 @@ class StudentPortalDB {
   private feedbackSubmissions: FeedbackSubmission[] = INITIAL_FEEDBACK_SUBMISSIONS;
   private helpdeskTickets: HelpdeskTicket[] = SEED_HELPDESK_TICKETS;
   private helpdeskComments: HelpdeskComment[] = SEED_HELPDESK_COMMENTS;
+  private feePayments: FeePaymentRecord[] = [...COLLEGE_FEE_PAYMENTS];
+  private feeReceipts: FeeReceipt[] = [...COLLEGE_FEE_RECEIPTS];
+  private paymentOrders: PaymentOrder[] = [];
+  private paymentAttempts: PaymentAttempt[] = [];
+  private paymentEvents: PaymentEvent[] = [];
 
   constructor() {
     this.init();
@@ -807,6 +819,11 @@ class StudentPortalDB {
     this.feedbackSubmissions = [...INITIAL_FEEDBACK_SUBMISSIONS];
     this.helpdeskTickets = [...SEED_HELPDESK_TICKETS];
     this.helpdeskComments = [...SEED_HELPDESK_COMMENTS];
+    this.feePayments = [...COLLEGE_FEE_PAYMENTS];
+    this.feeReceipts = [...COLLEGE_FEE_RECEIPTS];
+    this.paymentOrders = [];
+    this.paymentAttempts = [];
+    this.paymentEvents = [];
     this.saveAll();
     try {
       localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
@@ -833,6 +850,11 @@ class StudentPortalDB {
       const fbs = localStorage.getItem(STORAGE_KEYS.FEEDBACK_SUBMISSIONS);
       const hdt = localStorage.getItem(STORAGE_KEYS.HELPDESK_TICKETS);
       const hdc = localStorage.getItem(STORAGE_KEYS.HELPDESK_COMMENTS);
+      const fp = localStorage.getItem(STORAGE_KEYS.FEE_PAYMENTS);
+      const fr = localStorage.getItem(STORAGE_KEYS.FEE_RECEIPTS);
+      const po = localStorage.getItem(STORAGE_KEYS.PAYMENT_ORDERS);
+      const pa = localStorage.getItem(STORAGE_KEYS.PAYMENT_ATTEMPTS);
+      const pe = localStorage.getItem(STORAGE_KEYS.PAYMENT_EVENTS);
 
       if (u) this.user = JSON.parse(u);
       if (sub) this.subjects = JSON.parse(sub);
@@ -850,6 +872,11 @@ class StudentPortalDB {
       if (fbs) this.feedbackSubmissions = JSON.parse(fbs);
       if (hdt) this.helpdeskTickets = JSON.parse(hdt);
       if (hdc) this.helpdeskComments = JSON.parse(hdc);
+      if (fp) this.feePayments = JSON.parse(fp);
+      if (fr) this.feeReceipts = JSON.parse(fr);
+      if (po) this.paymentOrders = JSON.parse(po);
+      if (pa) this.paymentAttempts = JSON.parse(pa);
+      if (pe) this.paymentEvents = JSON.parse(pe);
     } catch {
       this.resetToDefaults();
     }
@@ -873,6 +900,11 @@ class StudentPortalDB {
       localStorage.setItem(STORAGE_KEYS.FEEDBACK_SUBMISSIONS, JSON.stringify(this.feedbackSubmissions));
       localStorage.setItem(STORAGE_KEYS.HELPDESK_TICKETS, JSON.stringify(this.helpdeskTickets));
       localStorage.setItem(STORAGE_KEYS.HELPDESK_COMMENTS, JSON.stringify(this.helpdeskComments));
+      localStorage.setItem(STORAGE_KEYS.FEE_PAYMENTS, JSON.stringify(this.feePayments));
+      localStorage.setItem(STORAGE_KEYS.FEE_RECEIPTS, JSON.stringify(this.feeReceipts));
+      localStorage.setItem(STORAGE_KEYS.PAYMENT_ORDERS, JSON.stringify(this.paymentOrders));
+      localStorage.setItem(STORAGE_KEYS.PAYMENT_ATTEMPTS, JSON.stringify(this.paymentAttempts));
+      localStorage.setItem(STORAGE_KEYS.PAYMENT_EVENTS, JSON.stringify(this.paymentEvents));
     } catch {
       // ignore
     }
@@ -1337,7 +1369,7 @@ class StudentPortalDB {
     return { error: 'Read-only college records: student write rejected.' };
   }
 
-  // --- FEES & RECEIPTS (READ-ONLY COLLEGE RECORDS) ---
+  // --- FEES & RECEIPTS (READ-ONLY COLLEGE RECORDS WITH ATOMIC DEMO SETTLEMENT) ---
   public getFeeStructures(semester?: number): FeeStructureItem[] {
     const sem = semester ?? this.user.semester;
     return COLLEGE_FEE_STRUCTURES.filter((fs) => fs.semester === sem);
@@ -1345,19 +1377,111 @@ class StudentPortalDB {
 
   public getFeePayments(semester?: number): FeePaymentRecord[] {
     const sem = semester ?? this.user.semester;
-    return COLLEGE_FEE_PAYMENTS.filter((fp) => fp.semester === sem);
+    return this.feePayments.filter((fp) => fp.semester === sem);
+  }
+
+  public addFeePayment(payment: FeePaymentRecord) {
+    this.feePayments.unshift(payment);
+    this.saveAll();
+  }
+
+  public updateFeePaymentStatus(paymentId: string, status: 'success' | 'failed' | 'pending') {
+    const p = this.feePayments.find((item) => item.id === paymentId);
+    if (p) {
+      p.status = status;
+      this.saveAll();
+    }
   }
 
   public getFeeReceipts(): FeeReceipt[] {
-    return COLLEGE_FEE_RECEIPTS;
+    return this.feeReceipts;
+  }
+
+  public addFeeReceipt(receipt: FeeReceipt) {
+    this.feeReceipts.unshift(receipt);
+    this.saveAll();
   }
 
   public getFeeReceiptById(id: string): FeeReceipt | undefined {
-    return COLLEGE_FEE_RECEIPTS.find((r) => r.id === id || r.paymentId === id);
+    return this.feeReceipts.find((r) => r.id === id || r.paymentId === id);
   }
 
   public getFeeReceiptByToken(token: string): FeeReceipt | undefined {
-    return COLLEGE_FEE_RECEIPTS.find((r) => r.verifyToken === token);
+    return this.feeReceipts.find((r) => r.verifyToken === token);
+  }
+
+  public getPaymentOrders(): PaymentOrder[] {
+    return this.paymentOrders;
+  }
+
+  public getPaymentOrderById(id: string): PaymentOrder | undefined {
+    return this.paymentOrders.find((o) => o.id === id);
+  }
+
+  public addPaymentOrder(order: PaymentOrder) {
+    this.paymentOrders.unshift(order);
+    this.saveAll();
+  }
+
+  public updatePaymentOrder(order: PaymentOrder) {
+    const idx = this.paymentOrders.findIndex((o) => o.id === order.id);
+    if (idx !== -1) {
+      this.paymentOrders[idx] = { ...order };
+    } else {
+      this.paymentOrders.unshift(order);
+    }
+    this.saveAll();
+  }
+
+  public getPaymentAttempts(orderId: string): PaymentAttempt[] {
+    return this.paymentAttempts.filter((a) => a.orderId === orderId);
+  }
+
+  public addPaymentAttempt(attempt: PaymentAttempt) {
+    this.paymentAttempts.unshift(attempt);
+    this.saveAll();
+  }
+
+  public getPaymentEvents(orderId: string): PaymentEvent[] {
+    return this.paymentEvents.filter((e) => e.orderId === orderId);
+  }
+
+  public addPaymentEvent(event: PaymentEvent) {
+    this.paymentEvents.unshift(event);
+    this.saveAll();
+  }
+
+  public clearAccountsInNoDuesRequests() {
+    let changed = false;
+    const today = new Date().toISOString().split('T')[0];
+
+    this.requests.forEach((req) => {
+      if (req.type === 'No-dues' && req.departmentStages) {
+        const accountsStage = req.departmentStages.find((s) => s.department === 'Accounts');
+        if (accountsStage && !accountsStage.cleared) {
+          accountsStage.cleared = true;
+          accountsStage.clearedAt = today;
+          accountsStage.remarks = 'Official college fees settled in full. Accounts department cleared.';
+          changed = true;
+
+          // Check if all 4 departments are now cleared
+          const allCleared = req.departmentStages.every((s) => s.cleared);
+          if (allCleared && req.status !== 'Approved') {
+            req.status = 'Approved';
+            req.comments.push({
+              role: 'System',
+              author: 'Clearance Engine',
+              comment: 'All 4 departments cleared. Digital No-Dues Certificate issued.',
+              date: today,
+            });
+          }
+        }
+      }
+    });
+
+    if (changed) {
+      this.saveAll();
+    }
   }
 
   public getFeeStatusSummary(semester?: number) {
@@ -1380,7 +1504,7 @@ class StudentPortalDB {
       balanceDue,
       dueDate,
       status,
-      paymentPortalUrl: COLLEGE_PAYMENT_PORTAL_URL,
+      paymentPortalUrl: COLLEGE_PAYMENT_URL,
       breakdown: structures,
       payments,
     };
@@ -1658,6 +1782,11 @@ class StudentPortalDB {
   // --- Notifications ---
   public getNotifications(): Notification[] {
     return this.notifications;
+  }
+
+  public addNotification(notification: Notification) {
+    this.notifications.unshift(notification);
+    this.saveAll();
   }
 
   public markNotificationAsRead(id: string) {

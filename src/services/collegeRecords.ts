@@ -135,6 +135,7 @@ export interface FeeStructureItem {
 
 export interface FeePaymentRecord {
   id: string;
+  orderId?: string;
   studentId: string;
   semester: number;
   amount: number;
@@ -1642,8 +1643,9 @@ export const COLLEGE_FEE_RECEIPTS: FeeReceipt[] = [
   },
 ];
 
-// Configurable College Online Payment Portal URL
-export const COLLEGE_PAYMENT_PORTAL_URL = 'https://portal.apex-institute.edu/fees/online-gateway';
+// Configurable College Online Payment Portal URL (hidden by default unless configured)
+export const COLLEGE_PAYMENT_URL = '';
+export const COLLEGE_PAYMENT_PORTAL_URL = COLLEGE_PAYMENT_URL;
 
 // Semester 6 Fee Due Date (Today + 5 days -> triggers Due Soon chip & notification)
 export const SEMESTER_6_FEE_DUE_DATE = '2026-10-15';
@@ -1658,7 +1660,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Dr. Ramesh Kumar',
     designation: 'Professor & Head of Department',
     department: 'Computer Science & Engineering',
-    email: 'ramesh.kumar@apex-institute.edu',
+    email: 'ramesh.kumar@campusconnect.edu',
     cabin: 'CS Block, Room 301 (HOD Office)',
     specializations: ['Computer Networks', 'Wireless Sensor Networks', 'Network Security'],
     bio: 'Ph.D. from IIT Madras. 18+ years of academic research in software-defined networking and distributed protocols.',
@@ -1677,7 +1679,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Prof. Ananya Sen',
     designation: 'Associate Professor',
     department: 'Computer Science & Engineering',
-    email: 'ananya.sen@apex-institute.edu',
+    email: 'ananya.sen@campusconnect.edu',
     cabin: 'CS Block, Room 208',
     specializations: ['Design & Analysis of Algorithms', 'Computational Complexity', 'Graph Algorithms'],
     bio: 'M.Tech from IISc Bangalore. Coach for ACM ICPC regional finalists with active industry consulting in algorithmic optimization.',
@@ -1696,7 +1698,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Dr. V. Srinivasan',
     designation: 'Professor',
     department: 'Computer Science & Engineering',
-    email: 'v.srinivasan@apex-institute.edu',
+    email: 'v.srinivasan@campusconnect.edu',
     cabin: 'CS Block, Room 314',
     specializations: ['Operating Systems', 'Kernel Architecture', 'Distributed Systems'],
     bio: '22+ years in academia. Former system architect at Sun Microsystems. Lead researcher in high-performance virtual memory management.',
@@ -1715,7 +1717,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Dr. Meera Patel',
     designation: 'Associate Professor',
     department: 'Computer Science & Engineering',
-    email: 'meera.patel@apex-institute.edu',
+    email: 'meera.patel@campusconnect.edu',
     cabin: 'CS Block, Room 212',
     specializations: ['Database Management Systems', 'Big Data Engineering', 'NoSQL Architectures'],
     bio: 'Ph.D. in Data Engineering. Author of 24 international IEEE journal papers on distributed query optimization and B-Tree indexing.',
@@ -1734,7 +1736,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Prof. K. Narayanan',
     designation: 'Assistant Professor (Senior Scale)',
     department: 'Computer Science & Engineering',
-    email: 'k.narayanan@apex-institute.edu',
+    email: 'k.narayanan@campusconnect.edu',
     cabin: 'CS Block, Room 105',
     specializations: ['Theory of Computation', 'Formal Languages', 'Automata Theory & Decidability'],
     bio: 'Gold medalist in Theoretical Computer Science from Anna University. Passionate educator for GATE CS aspirants.',
@@ -1751,7 +1753,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Dr. Shalini Rao',
     designation: 'Associate Professor',
     department: 'Computer Science & Engineering',
-    email: 'shalini.rao@apex-institute.edu',
+    email: 'shalini.rao@campusconnect.edu',
     cabin: 'CS Block, Room 204',
     specializations: ['Software Engineering', 'Agile & DevOps', 'Software Metrics & CI/CD'],
     bio: 'Ph.D. in Software Quality Engineering with certified Scrum Master credentials. Mentor for smart India hackathon teams.',
@@ -1769,7 +1771,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Dr. Arvind Menon',
     designation: 'Professor',
     department: 'Information Technology',
-    email: 'arvind.menon@apex-institute.edu',
+    email: 'arvind.menon@campusconnect.edu',
     cabin: 'IT Block, Room 402',
     specializations: ['Artificial Intelligence', 'Natural Language Processing', 'Deep Learning'],
     bio: 'Lead of the AI Innovation Center. PI for funded DST research projects in generative language models.',
@@ -1786,7 +1788,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Prof. Deepa Nair',
     designation: 'Assistant Professor',
     department: 'Information Technology',
-    email: 'deepa.nair@apex-institute.edu',
+    email: 'deepa.nair@campusconnect.edu',
     cabin: 'IT Block, Room 409',
     specializations: ['Cybersecurity', 'Applied Cryptography', 'Ethical Hacking'],
     bio: 'Certified Ethical Hacker (CEH). Faculty advisor for the Campus WhiteHat Security Guild.',
@@ -1803,7 +1805,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Dr. Rajesh Sundaram',
     designation: 'Professor',
     department: 'Electronics & Communication',
-    email: 'rajesh.s@apex-institute.edu',
+    email: 'rajesh.s@campusconnect.edu',
     cabin: 'ECE Block, Room 112',
     specializations: ['Embedded Systems', 'IoT Architectures', 'Edge Computing'],
     bio: 'Former Texas Instruments researcher. Spearheads the Autonomous Robotics & Embedded Devices laboratory.',
@@ -1820,7 +1822,7 @@ export const COLLEGE_FACULTY: FacultyMember[] = [
     name: 'Prof. Vikram Joshi',
     designation: 'Associate Professor',
     department: 'Computer Science & Engineering',
-    email: 'vikram.joshi@apex-institute.edu',
+    email: 'vikram.joshi@campusconnect.edu',
     cabin: 'CS Block, Room 309',
     specializations: ['Cloud Computing', 'Container Orchestration', 'Microservices'],
     bio: 'AWS Certified Solutions Architect & Kubernetes developer. Directs the college campus cloud infrastructure.',
@@ -2040,7 +2042,7 @@ export const SEED_HELPDESK_COMMENTS: HelpdeskComment[] = [
     ticketId: 'tkt-2',
     authorType: 'support',
     authorName: 'Library Digital Desk',
-    message: 'Institutional SSO proxy credentials activated for register number 2023CS0142. You can access IEEE Xplore through https://ezproxy.apex-institute.edu using your college Google ID.',
+    message: 'Institutional SSO proxy credentials activated for register number 2023CS0142. You can access IEEE Xplore through https://ezproxy.campusconnect.edu using your college Google ID.',
     createdAt: '2026-10-04T15:30:00Z',
   },
 ];
