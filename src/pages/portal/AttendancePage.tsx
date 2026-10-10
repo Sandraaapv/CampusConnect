@@ -1,28 +1,34 @@
 import React, { useState } from 'react';
 import { PortalLayout } from '../../components/portal/PortalLayout';
 import { db } from '../../services/db';
+import type { Subject } from '../../services/db';
 import {
-  Calendar,
   Sliders,
-  Check,
+  AlertCircle,
+  Clock,
+  Send,
   X,
-  Info,
+  CheckCircle,
 } from 'lucide-react';
 
 export const AttendancePage: React.FC = () => {
-  const [summary, setSummary] = useState(() => db.getAttendanceSummary());
+  const [summary] = useState(() => db.getAttendanceSummary());
   const subjects = db.getSubjects();
-  const timetable = db.getTimetable().filter((t) => t.dayOfWeek === 'Monday');
   const user = db.getUser();
   const threshold = user.settings?.attendanceThreshold || 75;
 
-  // What-If Simulator State
+  // What-If Simulator State (Simulation, not recorded)
   const [selectedSubId, setSelectedSubId] = useState<string>(subjects[0]?.id || '');
   const [simAction, setSimAction] = useState<'skip' | 'attend'>('skip');
   const [simCount, setSimCount] = useState<number>(2);
 
-  // Quick mark today confirmation
-  const [markSuccess, setMarkSuccess] = useState<string | null>(null);
+  // Mismatch report modal state
+  const [mismatchSubject, setMismatchSubject] = useState<Subject | null>(null);
+  const [mismatchDate, setMismatchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [mismatchClass, setMismatchClass] = useState('Lecture 2 (10:15 AM)');
+  const [mismatchExpected, setMismatchExpected] = useState<'Present' | 'On-Duty'>('Present');
+  const [mismatchNote, setMismatchNote] = useState('');
+  const [reportSuccess, setReportSuccess] = useState<string | null>(null);
 
   const activeSubSummary = summary.find((s) => s.subject.id === selectedSubId) || summary[0];
 
@@ -46,85 +52,62 @@ export const AttendancePage: React.FC = () => {
 
   const simulatedPercent = calculateSimulatedPercent();
 
-  const handleMarkToday = (subjectId: string, status: 'present' | 'absent') => {
-    const today = new Date().toISOString().split('T')[0];
-    db.recordAttendance(subjectId, today, status);
-    setSummary([...db.getAttendanceSummary()]);
-    setMarkSuccess(`Marked ${status} for today!`);
-    setTimeout(() => setMarkSuccess(null), 2500);
+  const handleReportMismatch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mismatchSubject) return;
+
+    db.createRequest({
+      type: 'Attendance correction',
+      title: `Attendance Correction: ${mismatchSubject.code} (${mismatchDate})`,
+      details: {
+        subjectId: mismatchSubject.id,
+        subjectCode: mismatchSubject.code,
+        date: mismatchDate,
+        className: mismatchClass,
+        expectedStatus: mismatchExpected,
+        note: mismatchNote,
+        reason: `Discrepancy reported: marked absent for ${mismatchClass} on ${mismatchDate}. Record should reflect ${mismatchExpected}. ${mismatchNote ? `Note: ${mismatchNote}` : ''}`,
+      },
+    });
+
+    setReportSuccess(`Correction request submitted to Approvals tracker for ${mismatchSubject.code}!`);
+    setMismatchSubject(null);
+    setMismatchNote('');
+    setTimeout(() => setReportSuccess(null), 4000);
   };
 
   return (
     <PortalLayout currentPath="/attendance" title="Attendance Calculator">
       <div className="space-y-6">
-        {/* Header Alert: Self-Reported Disclaimer & Threshold Info */}
-        <div className="p-4 rounded-xl bg-[var(--app-surface-subtle)] border border-[var(--app-border)] flex items-start gap-3">
-          <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-xs text-[var(--app-text-muted)] leading-relaxed">
-            <span className="font-bold text-[var(--app-text)]">Self-Reported Attendance Tracker:</span> All records and simulations reflect your personal inputs against the college's{' '}
-            <b className="text-[var(--app-text)]">{threshold}% threshold policy</b>. Safe skips formula:{' '}
-            <code className="px-1.5 py-0.5 rounded bg-[var(--app-surface)] border border-[var(--app-border)] font-mono text-[10.5px]">
-              floor(a / {(threshold / 100).toFixed(2)} - t)
-            </code>
-            . Adjust threshold in Settings anytime.
+        {/* Header Alert: Synced from College Records */}
+        <div className="p-4 rounded-xl bg-[var(--app-surface-subtle)] border border-[var(--app-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs text-[var(--app-text-muted)]">
+            <Clock className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>
+              Synced from college records · last updated today, 08:30 AM
+            </span>
+          </div>
+
+          <div className="text-xs text-[var(--app-text-muted)] flex items-center gap-3">
+            <span>
+              Policy threshold: <b className="text-[var(--app-text)]">{threshold}%</b>
+            </span>
+            <span className="hidden sm:inline text-neutral-400">·</span>
+            <span className="hidden sm:inline">
+              Safe skips formula: <code className="font-mono text-[11px] bg-[var(--app-surface)] px-1.5 py-0.5 rounded border border-[var(--app-border)]">floor(a / {(threshold / 100).toFixed(2)} - t)</code>
+            </span>
           </div>
         </div>
 
-        {/* =========================================================================
-            1. QUICK "MARK TODAY" PER TIMETABLE CLASS
-            ========================================================================= */}
-        <div className="p-5 sm:p-6 rounded-2xl bg-[var(--app-surface)] border border-[var(--app-border)] shadow-[var(--card-shadow)]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-[var(--accent-yellow)]" />
-              <h2 className="text-sm font-black uppercase tracking-wider text-[var(--app-text)]">
-                Mark Today's Classes (Self-Report)
-              </h2>
-            </div>
-            {markSuccess && (
-              <span className="text-xs font-bold text-emerald-500 animate-fade-in">{markSuccess}</span>
-            )}
+        {reportSuccess && (
+          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 shrink-0" />
+            <span>{reportSuccess}</span>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {timetable.map((t) => (
-              <div
-                key={t.id}
-                className="p-3.5 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-subtle)] flex flex-col justify-between gap-3"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono font-bold text-[var(--app-text-muted)]">{t.startTime}</span>
-                    <span className="text-[10px] text-[var(--app-text-muted)]">Room {t.room}</span>
-                  </div>
-                  <p className="text-xs font-extrabold text-[var(--app-text)] mt-1">{t.subjectName}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleMarkToday(t.subjectId, 'present')}
-                    className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] flex items-center justify-center gap-1 transition cursor-pointer"
-                  >
-                    <Check className="w-3 h-3" />
-                    <span>Present</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMarkToday(t.subjectId, 'absent')}
-                    className="flex-1 py-1.5 rounded-lg border border-[var(--app-border)] hover:bg-red-500/10 text-red-500 font-extrabold text-[10px] flex items-center justify-center gap-1 transition cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                    <span>Absent</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
         {/* =========================================================================
-            2. SUBJECT ATTENDANCE CARDS WITH PROGRESS RING & SAFE SKIPS / RECOVERY
+            SUBJECT ATTENDANCE CARDS FROM COLLEGE RECORDS
             ========================================================================= */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {summary.map((s) => {
@@ -160,63 +143,77 @@ export const AttendancePage: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Middle: Progress percent & Attended numbers */}
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--app-border)]">
+                {/* Progress Ring & Numbers */}
+                <div className="flex items-center justify-between py-2 border-y border-[var(--app-border)]">
                   <div>
-                    <span
-                      className={`text-2xl font-black ${
-                        isSafe ? 'text-emerald-500' : 'text-red-500'
-                      }`}
-                    >
+                    <span className="text-2xl font-black font-mono text-[var(--app-text)]">
                       {s.currentPercent}%
                     </span>
-                    <p className="text-[10px] text-[var(--app-text-muted)]">
+                    <p className="text-[11px] text-[var(--app-text-muted)] font-bold">
                       {s.attended} of {s.total} classes attended
                     </p>
                   </div>
 
-                  {/* Calculations breakdown */}
                   <div className="text-right">
                     {isSafe ? (
                       <div>
-                        <span className="text-xs font-black text-emerald-500">
-                          {s.safeSkips} Safe Skips
+                        <span className="text-sm font-black text-emerald-500 font-mono">
+                          +{s.safeSkips}
                         </span>
-                        <p className="text-[10px] text-[var(--app-text-muted)]">Can miss safely</p>
+                        <p className="text-[10px] text-[var(--app-text-muted)] font-medium">
+                          safe skips remaining
+                        </p>
                       </div>
                     ) : (
                       <div>
-                        <span className="text-xs font-black text-red-500">
-                          +{s.classesNeeded} Needed
+                        <span className="text-sm font-black text-red-500 font-mono">
+                          {s.classesNeeded}
                         </span>
-                        <p className="text-[10px] text-[var(--app-text-muted)]">Consecutive classes</p>
+                        <p className="text-[10px] text-[var(--app-text-muted)] font-medium">
+                          classes needed for {threshold}%
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setSelectedSubId(s.subject.id)}
-                  className="w-full py-2 rounded-xl border border-[var(--app-border)] hover:bg-[var(--app-surface-subtle)] text-xs font-bold text-[var(--app-text)] transition cursor-pointer text-center"
-                >
-                  Simulate in What-If &rarr;
-                </button>
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubId(s.subject.id)}
+                    className="flex-1 py-2 rounded-xl border border-[var(--app-border)] hover:bg-[var(--app-surface-subtle)] text-xs font-bold text-[var(--app-text)] transition cursor-pointer text-center"
+                  >
+                    Simulate &rarr;
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMismatchSubject(s.subject)}
+                    className="py-2 px-3 rounded-xl border border-[var(--app-border)] hover:border-amber-500/50 hover:bg-amber-500/5 text-xs font-bold text-[var(--app-text-muted)] hover:text-amber-600 dark:hover:text-amber-400 transition cursor-pointer text-center"
+                    title="Report mismatch in college records"
+                  >
+                    Report mismatch
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
 
         {/* =========================================================================
-            3. LIVE WHAT-IF SIMULATOR SLIDER
+            WHAT-IF SIMULATOR SLIDER (SIMULATION, NOT RECORDED)
             ========================================================================= */}
         <div className="p-5 sm:p-6 rounded-2xl bg-[var(--app-surface)] border border-[var(--app-border)] shadow-[var(--card-shadow)] space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-[var(--accent-yellow)]" />
               <h2 className="text-sm font-black uppercase tracking-wider text-[var(--app-text)]">
-                Interactive What-If Scenario Forecaster
+                Attendance Calculator What-If Simulator
               </h2>
+              <span className="px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-[var(--app-text)] text-[10px] font-extrabold uppercase tracking-wider">
+                Simulation, not recorded
+              </span>
             </div>
             <span className="text-xs font-bold text-[var(--app-text-muted)]">
               Subject: <b>{activeSubSummary?.subject.name}</b>
@@ -294,7 +291,7 @@ export const AttendancePage: React.FC = () => {
             {/* Projected Gauge Output */}
             <div className="p-5 rounded-2xl bg-[var(--app-surface-subtle)] border border-[var(--app-border)] text-center flex flex-col items-center justify-center">
               <span className="text-[10px] font-bold text-[var(--app-text-muted)] uppercase tracking-wider">
-                Projected Forecast
+                Hypothetical Forecast
               </span>
               <span
                 className={`text-4xl font-black mt-2 ${
@@ -319,6 +316,108 @@ export const AttendancePage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* =========================================================================
+            REPORT MISMATCH MODAL
+            ========================================================================= */}
+        {mismatchSubject && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+            <div className="bg-[var(--app-surface)] text-[var(--app-text)] max-w-lg w-full rounded-2xl p-6 border border-[var(--app-border)] shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--app-border)] pb-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-montserrat font-black text-base text-[var(--app-text)]">
+                    Report Attendance Mismatch
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMismatchSubject(null)}
+                  className="p-1 rounded-lg hover:bg-[var(--app-surface-subtle)] text-[var(--app-text-muted)]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-[var(--app-text-muted)]">
+                Submit an official correction request to the academic office for <b>{mismatchSubject.code} · {mismatchSubject.name}</b>.
+              </p>
+
+              <form onSubmit={handleReportMismatch} className="space-y-3.5">
+                <div>
+                  <label className="text-xs font-bold text-[var(--app-text)] block mb-1">
+                    Date of Class
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={mismatchDate}
+                    onChange={(e) => setMismatchDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs font-mono text-[var(--app-text)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[var(--app-text)] block mb-1">
+                    Which Class / Period
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={mismatchClass}
+                    onChange={(e) => setMismatchClass(e.target.value)}
+                    placeholder="e.g. 10:15 AM Lecture / Lab session"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs text-[var(--app-text)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[var(--app-text)] block mb-1">
+                    What should the record say?
+                  </label>
+                  <select
+                    value={mismatchExpected}
+                    onChange={(e) => setMismatchExpected(e.target.value as 'Present' | 'On-Duty')}
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs text-[var(--app-text)] font-bold"
+                  >
+                    <option value="Present">Present (Attended in person)</option>
+                    <option value="On-Duty">On-Duty (Authorized event / college duty)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[var(--app-text)] block mb-1">
+                    Optional Note / Clarification
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={mismatchNote}
+                    onChange={(e) => setMismatchNote(e.target.value)}
+                    placeholder="Provide roll-call context or faculty verification details..."
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs text-[var(--app-text)]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--app-border)]">
+                  <button
+                    type="button"
+                    onClick={() => setMismatchSubject(null)}
+                    className="px-4 py-2 rounded-xl border border-[var(--app-border)] text-xs font-bold text-[var(--app-text-muted)] hover:bg-[var(--app-surface-subtle)] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-black flex items-center gap-1.5 hover:opacity-90 transition cursor-pointer shadow-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Submit to Approvals</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </PortalLayout>
   );

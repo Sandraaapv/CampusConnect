@@ -9,7 +9,7 @@ export const RequestsPage: React.FC = () => {
   const [filterType, setFilterType] = useState<string>('All');
   const requests = db.getRequests();
 
-  const types = ['All', 'No-dues', 'OD letter', 'Scholarship', 'Event'];
+  const types = ['All', 'No-dues', 'OD letter', 'Scholarship', 'Event', 'Attendance correction'];
   const filteredRequests =
     filterType === 'All' ? requests : requests.filter((r) => r.type === filterType);
 

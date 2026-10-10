@@ -40,7 +40,7 @@ interface NavSection {
 }
 
 export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, children }) => {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, setTheme } = useTheme();
   const user = db.getUser();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -227,6 +227,57 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
               <span>Settings</span>
             </button>
 
+            {/* Divider below Settings */}
+            <div className="border-t border-[var(--app-border)] my-1" />
+
+            {/* Segmented Control: Light / Dark */}
+            <div
+              role="radiogroup"
+              aria-label="Theme mode"
+              className="w-full h-9 bg-[var(--app-surface-subtle)] p-1 rounded-full border border-[var(--app-border)] flex items-center gap-1"
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setTheme('dark');
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setTheme('light');
+                }
+              }}
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === 'light'}
+                aria-label="Light mode"
+                onClick={() => setTheme('light')}
+                className={`flex-1 h-full flex items-center justify-center gap-1.5 rounded-full text-xs transition-colors duration-150 motion-reduce:transition-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white ${
+                  theme === 'light'
+                    ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black shadow-xs'
+                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)] font-bold'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5 shrink-0 stroke-[2.2]" />
+                <span>Light</span>
+              </button>
+
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === 'dark'}
+                aria-label="Dark mode"
+                onClick={() => setTheme('dark')}
+                className={`flex-1 h-full flex items-center justify-center gap-1.5 rounded-full text-xs transition-colors duration-150 motion-reduce:transition-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white ${
+                  theme === 'dark'
+                    ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black shadow-xs'
+                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)] font-bold'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5 shrink-0 stroke-[2.2]" />
+                <span>Dark</span>
+              </button>
+            </div>
+
             {/* Profile Card with yellow 'AS' avatar */}
             <button
               type="button"
@@ -312,6 +363,42 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
                 <Settings className="w-4 h-4" />
                 <span>Settings</span>
               </button>
+
+              {/* Mobile Drawer Segmented Theme Control */}
+              <div
+                role="radiogroup"
+                aria-label="Theme mode"
+                className="w-full h-10 bg-[var(--app-surface-subtle)] p-1 rounded-full border border-[var(--app-border)] flex items-center gap-1 mt-4"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === 'light'}
+                  onClick={() => setTheme('light')}
+                  className={`flex-1 h-full flex items-center justify-center gap-1.5 rounded-full text-xs transition cursor-pointer ${
+                    theme === 'light'
+                      ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black'
+                      : 'text-[var(--app-text-muted)] font-bold'
+                  }`}
+                >
+                  <Sun className="w-4 h-4" />
+                  <span>Light</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === 'dark'}
+                  onClick={() => setTheme('dark')}
+                  className={`flex-1 h-full flex items-center justify-center gap-1.5 rounded-full text-xs transition cursor-pointer ${
+                    theme === 'dark'
+                      ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black'
+                      : 'text-[var(--app-text-muted)] font-bold'
+                  }`}
+                >
+                  <Moon className="w-4 h-4" />
+                  <span>Dark</span>
+                </button>
+              </div>
             </div>
           )}
 

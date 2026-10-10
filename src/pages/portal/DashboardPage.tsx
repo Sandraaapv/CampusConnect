@@ -1,22 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { PortalLayout } from '../../components/portal/PortalLayout';
-import { useTheme } from '../../context/ThemeContext';
-import { db } from '../../services/db';
 import { navigate } from '../../utils/navigation';
 import {
-  Search,
-  Bell,
-  Sun,
-  Moon,
   ArrowRight,
-  Check,
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
-  const { theme, toggleTheme } = useTheme();
-  const [markedOS, setMarkedOS] = useState(false);
-  const notifications = db.getNotifications();
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <PortalLayout currentPath="/dashboard">
@@ -46,39 +35,6 @@ export const DashboardPage: React.FC = () => {
                 </svg>
               </span>
             </h1>
-          </div>
-
-          {/* Top Right Actions: Search, Bell, Theme Toggle */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/circulars')}
-              className="px-3 py-1.5 rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-neutral-500 dark:text-neutral-400 hover:text-[var(--app-text)] text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>Search</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/notifications')}
-              className="relative p-2 rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] hover:bg-[var(--app-surface-subtle)] transition cursor-pointer"
-              aria-label="Notifications"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#ff8fa3]" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] hover:bg-[var(--app-surface-subtle)] transition cursor-pointer"
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-300" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
           </div>
         </div>
 
@@ -312,24 +268,9 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setMarkedOS(!markedOS)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition cursor-pointer shadow-xs ${
-                    markedOS
-                      ? 'bg-[#00c98d] text-black font-black flex items-center gap-1'
-                      : 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:opacity-90'
-                  }`}
-                >
-                  {markedOS ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Marked</span>
-                    </>
-                  ) : (
-                    'Mark present'
-                  )}
-                </button>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-[11px] border border-emerald-500/20">
+                  Attended
+                </span>
               </div>
 
               {/* Period 3: DBMS */}
@@ -348,8 +289,8 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <span className="text-xs font-bold text-neutral-400">
-                  Next
+                <span className="px-2 py-0.5 rounded-full bg-[var(--app-surface-subtle)] text-[var(--app-text-muted)] font-bold text-[10.5px] border border-[var(--app-border)]">
+                  Not yet recorded
                 </span>
               </div>
 
@@ -374,8 +315,8 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <span className="text-xs font-bold text-neutral-400">
-                  Later
+                <span className="px-2 py-0.5 rounded-full bg-[var(--app-surface-subtle)] text-[var(--app-text-muted)] font-bold text-[10.5px] border border-[var(--app-border)]">
+                  Not yet recorded
                 </span>
               </div>
             </div>

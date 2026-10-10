@@ -1,37 +1,39 @@
 import React, { useState, useMemo } from 'react';
 import { PortalLayout } from '../../components/portal/PortalLayout';
 import { db } from '../../services/db';
-import type { Exam } from '../../services/db';
 import {
   Clock,
   Sparkles,
-  CheckCircle2,
   Calendar,
+  AlertTriangle,
+  BookOpen,
 } from 'lucide-react';
 
 export const ExamsPage: React.FC = () => {
-  const [exams] = useState<Exam[]>(() => db.getExams());
+  const user = db.getUser();
+  const exams = db.getExams();
   const subjects = db.getSubjects();
-  const marks = db.getMarks();
+  const syllabusUnits = db.getSyllabusUnits();
 
-  // Study Planner States
-  const [dailyHours, setDailyHours] = useState(5);
-  const [coverageMap, setCoverageMap] = useState<Record<string, number>>(() => {
-    const map: Record<string, number> = {};
-    subjects.forEach((s) => {
-      map[s.id] = s.syllabusCoveragePercent || 65;
-    });
-    return map;
-  });
+  // Student's editable unit progress (saved in db/localStorage)
+  const [unitProgress, setUnitProgress] = useState<Record<string, boolean>>(() =>
+    db.getUnitProgress()
+  );
 
-  const handleCoverageChange = (subjectId: string, val: number) => {
-    setCoverageMap((prev) => ({
-      ...prev,
-      [subjectId]: val,
-    }));
+  // Daily study hours preference (from settings, default 4h)
+  const [dailyHours, setDailyHours] = useState<number>(user.settings?.dailyStudyHours || 4);
+
+  const handleToggleUnit = (unitId: string) => {
+    const updated = db.toggleUnitProgress(unitId);
+    setUnitProgress({ ...updated });
   };
 
-  // Calculate days left for each exam
+  const handleHoursChange = (hours: number) => {
+    setDailyHours(hours);
+    db.updateUserSettings({ dailyStudyHours: hours });
+  };
+
+  // Exam countdowns
   const today = new Date();
   const examWithCountdowns = useMemo(() => {
     return exams.map((exam) => {
@@ -45,111 +47,43 @@ export const ExamsPage: React.FC = () => {
     }).sort((a, b) => a.daysLeft - b.daysLeft);
   }, [exams, today]);
 
-  // Generate weighted day-by-day study schedule
-  const generatedPlan = useMemo(() => {
-    // Determine priority score per subject:
-    // Low internal marks + Low syllabus coverage = High priority!
-    const subjectPriorities = subjects.map((sub) => {
-      const markRecord = marks.find((m) => m.subjectId === sub.id);
-      const internalScore = markRecord ? markRecord.totalInternal : 35; // out of 50
-      const coverage = coverageMap[sub.id] ?? 65; // out of 100
+  // Dynamic day-by-day study plan generated via official algorithm
+  const planResult = useMemo(() => {
+    return db.getStudyPlan(dailyHours);
+  }, [dailyHours, unitProgress]);
 
-      // Deficit score: max internal is 50, max coverage is 100
-      const markDeficit = Math.max(0, 50 - internalScore);
-      const coverageDeficit = Math.max(0, 100 - coverage);
-
-      // Weighted score
-      const priorityScore = markDeficit * 2 + coverageDeficit;
-
+  // Per-subject unit progress stats
+  const subjectProgressStats = useMemo(() => {
+    return subjects.map((sub) => {
+      const units = syllabusUnits.filter((u) => u.subjectId === sub.id);
+      const coveredCount = units.filter((u) => unitProgress[u.id]).length;
+      const totalCount = units.length;
+      const pct = totalCount > 0 ? Math.round((coveredCount / totalCount) * 100) : 0;
       return {
         subject: sub,
-        internalScore,
-        coverage,
-        priorityScore: Math.max(1, priorityScore),
+        units,
+        coveredCount,
+        totalCount,
+        percentage: pct,
       };
     });
-
-    const totalPriority = subjectPriorities.reduce((acc, curr) => acc + curr.priorityScore, 0);
-
-    // Generate 7-day study breakdown
-    const days: {
-      dayName: string;
-      dateString: string;
-      allocations: {
-        subjectCode: string;
-        subjectName: string;
-        hours: number;
-        coverageFocus: string;
-      }[];
-    }[] = [];
-
-    const dayNames = ['Today', 'Tomorrow', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'];
-
-    for (let i = 0; i < 7; i++) {
-      const targetDate = new Date();
-      targetDate.setDate(today.getDate() + i);
-      const dateString = targetDate.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      });
-
-      // Distribute dailyHours across top subjects based on weighting
-      let allocatedToday = 0;
-      const allocations: {
-        subjectCode: string;
-        subjectName: string;
-        hours: number;
-        coverageFocus: string;
-      }[] = [];
-
-      // Sort by priority for this day
-      const sorted = [...subjectPriorities].sort((a, b) => b.priorityScore - a.priorityScore);
-
-      sorted.slice(0, 3).forEach((item) => {
-        let hrs = Math.round((item.priorityScore / totalPriority) * dailyHours * 1.5 * 10) / 10;
-        if (hrs < 1) hrs = 1;
-        if (allocatedToday + hrs > dailyHours) {
-          hrs = Math.max(0.5, Math.round((dailyHours - allocatedToday) * 10) / 10);
-        }
-        if (hrs > 0 && allocatedToday < dailyHours) {
-          allocations.push({
-            subjectCode: item.subject.code,
-            subjectName: item.subject.name,
-            hours: hrs,
-            coverageFocus:
-              item.coverage < 60
-                ? 'High-weight unit revisions & formulas'
-                : 'PYQ problem solving & mock timed test',
-          });
-          allocatedToday += hrs;
-        }
-      });
-
-      days.push({
-        dayName: dayNames[i],
-        dateString,
-        allocations,
-      });
-    }
-
-    return days;
-  }, [subjects, marks, coverageMap, dailyHours, today]);
+  }, [subjects, syllabusUnits, unitProgress]);
 
   return (
-    <PortalLayout currentPath="/exams" title="Exam Countdown & Smart Planner">
+    <PortalLayout currentPath="/exams" title="Exam Countdown & Study Planner">
       <div className="space-y-8">
         {/* Header Hero Banner with Mascot */}
-        <div className="portal-card p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="p-6 sm:p-8 rounded-2xl bg-[var(--app-surface)] border border-[var(--app-border)] shadow-[var(--card-shadow)] flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-3 max-w-xl text-center md:text-left">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-black text-[var(--accent-yellow)]">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Smart Weakness-Weighted Planner</span>
+              <span>Dynamic Syllabus-Weighted Planner</span>
             </div>
             <h2 className="portal-heading text-2xl sm:text-3xl text-[var(--app-text)]">
-              Targeted Preparation. Zero Last-Minute Panic.
+              Syllabus Coverage & Day-by-Day Study Plan
             </h2>
             <p className="text-xs sm:text-sm text-[var(--app-text-muted)] leading-relaxed">
-              CampusConnect automatically distributes your study hours to give more time to subjects with lower internal marks and lower syllabus completion.
+              Official exam timetable synced from college records. Tick syllabus units as you study to automatically re-balance your daily schedule before exams.
             </p>
           </div>
 
@@ -163,54 +97,54 @@ export const ExamsPage: React.FC = () => {
         </div>
 
         {/* =========================================================================
-            1. EXAM COUNTDOWN CARDS
+            1. EXAM COUNTDOWN CARDS (FROM COLLEGE RECORDS)
             ========================================================================= */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="portal-heading text-lg text-[var(--app-text)]">
-              Upcoming Semester Examinations
+              Official Semester Examination Timetable
             </h3>
             <span className="text-xs font-bold text-[var(--app-text-muted)]">
-              {examWithCountdowns.length} Scheduled
+              {examWithCountdowns.length} Scheduled · Read-Only
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
             {examWithCountdowns.map((exam) => {
-              const isUrgent = exam.daysLeft <= 7;
+              const isUrgent = exam.daysLeft <= 14;
               return (
                 <div
                   key={exam.id}
-                  className={`portal-card p-5 space-y-3 relative overflow-hidden transition-transform hover:-translate-y-0.5 ${
-                    isUrgent ? 'border-amber-500/50' : ''
+                  className={`p-4 rounded-2xl bg-[var(--app-surface)] border shadow-[var(--card-shadow)] space-y-2 relative overflow-hidden transition-all ${
+                    isUrgent ? 'border-amber-500/50' : 'border-[var(--app-border)]'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--app-surface-subtle)] text-[var(--app-text)] border border-[var(--app-border)]">
+                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--app-surface-subtle)] text-[var(--app-text)] border border-[var(--app-border)]">
                       {exam.subjectCode}
                     </span>
                     <span
-                      className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                         isUrgent
                           ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
                           : 'bg-[var(--app-surface-subtle)] text-[var(--app-text-muted)]'
                       }`}
                     >
-                      {exam.daysLeft === 0 ? 'Today!' : `${exam.daysLeft} days left`}
+                      {exam.daysLeft === 0 ? 'Today!' : `${exam.daysLeft}d left`}
                     </span>
                   </div>
 
                   <div>
-                    <h4 className="font-extrabold text-sm text-[var(--app-text)] truncate">
+                    <h4 className="font-extrabold text-xs text-[var(--app-text)] truncate">
                       {exam.subjectName}
                     </h4>
-                    <p className="text-[11px] text-[var(--app-text-muted)] flex items-center gap-1.5 mt-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>{exam.examDate} • {exam.startTime}</span>
+                    <p className="text-[10px] text-[var(--app-text-muted)] flex items-center gap-1 mt-1 font-mono">
+                      <Calendar className="w-3 h-3 text-neutral-400 shrink-0" />
+                      <span>{exam.examDate}</span>
                     </p>
-                    <p className="text-[11px] text-[var(--app-text-muted)] flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Duration: {exam.duration} ({exam.room})</span>
+                    <p className="text-[10px] text-[var(--app-text-muted)] flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3 h-3 text-neutral-400 shrink-0" />
+                      <span>{exam.startTime} ({exam.room})</span>
                     </p>
                   </div>
                 </div>
@@ -220,112 +154,161 @@ export const ExamsPage: React.FC = () => {
         </div>
 
         {/* =========================================================================
-            2. PLANNER CONTROLS (Study Hours & Syllabus Coverage)
+            2. SYLLABUS UNIT PROGRESS TRACKER (STUDENT'S OWN STUDY PROGRESS)
             ========================================================================= */}
-        <div className="portal-card p-6 sm:p-8 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--app-border)] pb-4">
+        <div className="p-5 sm:p-6 rounded-2xl bg-[var(--app-surface)] border border-[var(--app-border)] shadow-[var(--card-shadow)] space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--app-border)] pb-4">
             <div>
-              <h3 className="portal-heading text-lg text-[var(--app-text)]">
-                Tune Your Study Weights
-              </h3>
-              <p className="text-xs text-[var(--app-text-muted)]">
-                Adjust daily available hours and mark your current syllabus coverage per subject.
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-[var(--accent-yellow)]" />
+                <h3 className="portal-heading text-base text-[var(--app-text)]">
+                  Syllabus Units & Your Study Progress
+                </h3>
+              </div>
+              <p className="text-xs text-[var(--app-text-muted)] mt-1">
+                Tick the official syllabus units you have studied. Your study planner updates dynamically.
               </p>
             </div>
 
-            {/* Daily Hours Slider */}
-            <div className="flex items-center gap-3 bg-[var(--app-surface-subtle)] px-4 py-2 rounded-xl border border-[var(--app-border)]">
-              <Clock className="w-4 h-4 text-[var(--accent-yellow)]" />
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-[var(--app-text-muted)] uppercase">Daily Target</span>
-                <span className="text-xs font-black text-[var(--app-text)]">{dailyHours} Hours / Day</span>
+            {/* Daily Study Hours Slider */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-[var(--app-text-muted)]">Daily Study Quota:</span>
+              <div className="flex items-center gap-1">
+                {[3, 4, 5, 6].map((hrs) => (
+                  <button
+                    key={hrs}
+                    type="button"
+                    onClick={() => handleHoursChange(hrs)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                      dailyHours === hrs
+                        ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] shadow-xs'
+                        : 'border border-[var(--app-border)] text-[var(--app-text-muted)] hover:text-[var(--app-text)]'
+                    }`}
+                  >
+                    {hrs}h
+                  </button>
+                ))}
               </div>
-              <input
-                type="range"
-                min={2}
-                max={12}
-                step={0.5}
-                value={dailyHours}
-                onChange={(e) => setDailyHours(parseFloat(e.target.value))}
-                className="w-24 accent-amber-400 cursor-pointer ml-2"
-              />
             </div>
           </div>
 
-          {/* Syllabus Coverage Per Subject */}
-          <div className="space-y-4">
-            <label className="text-xs font-extrabold text-[var(--app-text)] uppercase tracking-wider block">
-              Syllabus Coverage Progress
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subjects.map((sub) => {
-                const markRecord = marks.find((m) => m.subjectId === sub.id);
-                const currentCov = coverageMap[sub.id] ?? 65;
-                return (
-                  <div
-                    key={sub.id}
-                    className="p-4 rounded-xl bg-[var(--app-surface-subtle)] border border-[var(--app-border)] space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-extrabold text-xs text-[var(--app-text)] block">
-                          {sub.code}
-                        </span>
-                        <span className="text-[11px] text-[var(--app-text-muted)] truncate block max-w-[160px]">
-                          {sub.name}
-                        </span>
-                      </div>
-                      <span className="font-mono text-xs font-bold text-[var(--accent-yellow)]">
-                        {currentCov}%
-                      </span>
-                    </div>
+          {/* Subject Progress Bars & Unit Checklists */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {subjectProgressStats.map((stat) => (
+              <div
+                key={stat.subject.id}
+                className="p-4 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-subtle)] space-y-3"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-black text-[var(--app-text-muted)]">
+                      {stat.subject.code}
+                    </span>
+                    <span className="text-xs font-mono font-black text-[var(--app-text)]">
+                      {stat.percentage}% ({stat.coveredCount}/{stat.totalCount} units)
+                    </span>
+                  </div>
+                  <h4 className="font-extrabold text-xs text-[var(--app-text)] mt-0.5 truncate">
+                    {stat.subject.name}
+                  </h4>
 
-                    <div className="flex items-center justify-between text-[10px] text-[var(--app-text-muted)]">
-                      <span>Internal: {markRecord?.totalInternal ?? 35} / 50</span>
-                      <span>Weight: {currentCov < 70 ? 'High' : 'Normal'}</span>
-                    </div>
-
-                    <input
-                      type="range"
-                      min={10}
-                      max={100}
-                      step={5}
-                      value={currentCov}
-                      onChange={(e) => handleCoverageChange(sub.id, parseInt(e.target.value))}
-                      className="w-full accent-amber-400 cursor-pointer"
+                  {/* Progress bar */}
+                  <div className="w-full h-2 rounded-full bg-[var(--app-border)] mt-2 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${stat.percentage}%` }}
                     />
                   </div>
-                );
-              })}
-            </div>
+                </div>
+
+                {/* Units Checklist */}
+                <div className="space-y-1.5 pt-1">
+                  {stat.units.map((u) => {
+                    const isCovered = !!unitProgress[u.id];
+                    return (
+                      <label
+                        key={u.id}
+                        className="flex items-start gap-2.5 p-1.5 rounded-lg hover:bg-[var(--app-surface)] cursor-pointer transition select-none text-left"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isCovered}
+                          onChange={() => handleToggleUnit(u.id)}
+                          className="mt-0.5 rounded accent-emerald-500 cursor-pointer"
+                        />
+                        <div className="text-[11px] leading-tight">
+                          <span
+                            className={`font-bold ${
+                              isCovered
+                                ? 'line-through text-[var(--app-text-muted)]'
+                                : 'text-[var(--app-text)]'
+                            }`}
+                          >
+                            Unit {u.unitNo}: {u.title}
+                          </span>
+                          <span className="text-[10px] text-[var(--app-text-muted)] font-mono ml-1.5">
+                            ({u.estHours}h)
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Feasibility Alert if plan is constrained */}
+        {planResult.isConstrained && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <div>
+              <p className="font-extrabold">Schedule Feasibility Alert</p>
+              <p className="mt-0.5">
+                The remaining syllabus hours exceed comfortable spacing before your nearest exams for:{' '}
+                <b>{planResult.atRiskSubjects.map((s) => `${s.code} (${s.uncoveredHours}h)`).join(', ')}</b>.
+                Consider increasing your daily study quota or ticking completed units.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* =========================================================================
-            3. DAY-BY-DAY WEIGHTED STUDY SCHEDULE
+            3. DYNAMIC 7-DAY STUDY SCHEDULE (DIFFERENT UNITS PER DAY, NO REPETITION)
             ========================================================================= */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="portal-heading text-lg text-[var(--app-text)]">
-              Generated 7-Day Weighted Schedule
-            </h3>
-            <span className="text-xs font-extrabold text-[var(--accent-green)] flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Dynamically Optimized</span>
+        <div className="p-5 sm:p-6 rounded-2xl bg-[var(--app-surface)] border border-[var(--app-border)] shadow-[var(--card-shadow)] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="portal-heading text-base text-[var(--app-text)]">
+                Generated Day-by-Day Study Schedule
+              </h3>
+              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                Weighted by nearest exam, internal mark weakness, and remaining syllabus. Max {dailyHours}h/day.
+              </p>
+            </div>
+            <span className="text-xs font-mono font-bold text-[var(--app-text-muted)]">
+              {planResult.totalAllocatedHours} total hours planned this week
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-            {generatedPlan.map((day, idx) => (
+            {planResult.days.map((day) => (
               <div
-                key={day.dayName}
-                className={`portal-card p-4 flex flex-col justify-between space-y-3 ${
-                  idx === 0 ? 'border-amber-400/50 bg-amber-400/5' : ''
+                key={day.dayIndex}
+                className={`p-3.5 rounded-xl border flex flex-col justify-between min-h-[220px] transition-all ${
+                  day.isToday
+                    ? 'border-[var(--btn-primary-bg)] bg-[var(--app-surface-subtle)] ring-1 ring-[var(--btn-primary-bg)]'
+                    : 'border-[var(--app-border)] bg-[var(--app-surface)]'
                 }`}
               >
                 <div>
-                  <div className="flex items-center justify-between border-b border-[var(--app-border)] pb-2 mb-2">
-                    <span className="font-extrabold text-xs text-[var(--app-text)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span
+                      className={`text-xs font-black ${
+                        day.isToday ? 'text-[var(--accent-yellow)] underline' : 'text-[var(--app-text)]'
+                      }`}
+                    >
                       {day.dayName}
                     </span>
                     <span className="text-[10px] font-mono text-[var(--app-text-muted)]">
@@ -333,30 +316,39 @@ export const ExamsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="space-y-2">
-                    {day.allocations.map((alloc, i) => (
-                      <div
-                        key={i}
-                        className="p-2 rounded-lg bg-[var(--app-surface-subtle)] border border-[var(--app-border)] text-left"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] font-black text-[var(--app-text)]">
-                            {alloc.subjectCode}
-                          </span>
-                          <span className="text-[10px] font-bold text-[var(--accent-yellow)]">
-                            {alloc.hours}h
-                          </span>
+                  {/* Tasks List */}
+                  {day.isRest ? (
+                    <div className="py-8 text-center text-xs font-bold text-[var(--app-text-muted)]">
+                      <p>✨ Rest &</p>
+                      <p>Consolidation</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {day.tasks.map((task, tIdx) => (
+                        <div
+                          key={tIdx}
+                          className={`p-2 rounded-lg border text-left space-y-1 ${
+                            task.isRevision
+                              ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                              : 'bg-[var(--app-surface-subtle)] border-[var(--app-border)] text-[var(--app-text)]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono font-black">
+                            <span>{task.subjectCode}</span>
+                            <span>{task.hours}h</span>
+                          </div>
+                          <p className="text-[11px] font-bold leading-tight line-clamp-2">
+                            {task.unitTitle}
+                          </p>
                         </div>
-                        <p className="text-[9px] text-[var(--app-text-muted)] line-clamp-2 mt-1">
-                          {alloc.coverageFocus}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                <div className="pt-2 border-t border-[var(--app-border)] text-center text-[10px] font-bold text-[var(--app-text-muted)]">
-                  Total: {day.allocations.reduce((sum, a) => sum + a.hours, 0)} hrs
+                <div className="pt-2 border-t border-[var(--app-border)] flex items-center justify-between text-[10px] font-mono text-[var(--app-text-muted)]">
+                  <span>Day total:</span>
+                  <span className="font-bold text-[var(--app-text)]">{day.totalHours}h</span>
                 </div>
               </div>
             ))}

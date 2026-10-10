@@ -85,37 +85,34 @@ npm run preview
 
 ---
 
-## Project Structure
+## Student Portal Architecture & College Records Layer
 
-```
-CampusConnect/
-├── public/
-│   └── mascots/                     # 10 Puppet mascot PNG assets
-├── src/
-│   ├── components/
-│   │   ├── icons/
-│   │   │   └── FeatureIcons.tsx     # 10 Custom hand-drawn inline SVGs
-│   │   ├── mockups/
-│   │   │   ├── LaptopMockup.tsx     # Reusable laptop frame with glare & camera
-│   │   │   └── PhoneMockup.tsx      # Reusable phone chassis with dynamic island
-│   │   ├── previews/
-│   │   │   ├── DashboardPreview.tsx # Scene 2: Urgent feed & timetable
-│   │   │   ├── AttendancePreview.tsx# Scene 3: Bunk Bank what-if slider
-│   │   │   ├── CgpaPreview.tsx      # Scene 4: CGPA predictor & countdowns
-│   │   │   ├── CircularsPreview.tsx # Scene 5: Filtered circulars & notes
-│   │   │   ├── RequestPreview.tsx   # Scene 6: Multi-step approval & stamp
-│   │   │   ├── StreaksPreview.tsx   # Scene 7: 18-day streak & badge grid
-│   │   │   ├── IdCardPreview.tsx    # Scene 8: Glossy ID card & QR code
-│   │   │   └── WrappedPreview.tsx   # Scene 9: Semester Wrapped story slides
-│   │   └── Scene.tsx                # Scene component with 50/50 split layout
-│   ├── data/
-│   │   └── scenes.ts                # Scene metadata, copy, and icons
-│   ├── hooks/
-│   │   └── useScrollScenes.ts       # GSAP ScrollTrigger timeline & scrub logic
-│   ├── App.tsx                      # Top progress bar, fixed header & pinned stage
-│   ├── index.css                    # Tailwind CSS v4 & custom typography rules
-│   └── main.tsx                     # React application entry point
-├── package.json
-├── vite.config.ts
-└── README.md
-```
+CampusConnect features a complete **Student Portal** (behind the "Sign in" flow) designed strictly for students with zero faculty or admin write access:
+
+### 1. Official College Records Layer (`src/services/collegeRecords.ts`)
+- **Single Source of Truth**: All subjects, timetable schedules, official historical attendance records, internal assessment scores, credits, grading schemes, and exam timetables originate from the college records layer (synced from the college ERP or Student Information System in production).
+- **Read-Only Guarantee**: The student role and client UI have zero write path to official attendance, marks, credits, or exam timetables. Direct student write endpoints (such as `POST /attendance` or `POST /marks`) are rejected.
+- **Attendance Discrepancy Reporting**: Students can report attendance discrepancies via "Report a mismatch" on each subject card, which creates an official "Attendance correction" application in the paperless Approvals tracker.
+- **On-Duty (OD) Leave**: When an authorized OD letter is approved through the multi-stage administrative workflow, OD days are officially credited to the student's attendance records.
+
+### 2. Configurable College Assessment Scheme & Totals Guarantee
+- **Internal Assessment Scheme**:
+  - Internal 1: Max 25
+  - Internal 2: Max 25
+  - Assignment / Quiz: Max 10
+  - **College Formula**: `((Internal 1 + Internal 2) / 50 * 40) + Assignment` = **Max 50**.
+  - **Guarantee**: Total internal score is strictly capped at its maximum of 50 (never displaying invalid totals like 56.5/50).
+- **End-Semester Weighting**: Weighted 50% internals and 50% end-semester exam.
+- **Needed End-Sem Marks**: Real-time calculation across all credits for the minimum marks (out of 100) needed to achieve the student's target CGPA. Subjects where required marks exceed 100 are flagged as impossible, offering one-click realignment to the best achievable CGPA.
+- **What-If Simulation**: A dedicated per-subject simulation field (`What-if, not recorded`) allows hypothetical forecasting without altering official records.
+
+### 3. Dynamic Syllabus-Weighted Study Planner (`/exams`)
+- **College Syllabus Units**: Each official subject contains unit titles and estimated study hours from college records.
+- **Student Progress**: Students tick units they have covered; progress is saved in local storage.
+- **Automated Day-by-Day Plan**:
+  - Dynamically builds a 7-day schedule allocating uncovered units across days before each exam.
+  - Generates distinct units on different days (no repeating identical task blocks).
+  - Weights study hours toward nearer exams, lower internal marks, and remaining syllabus volume.
+  - Respects the daily study hours cap (default 4h, configurable in Settings).
+  - Automatically reserves the final 1–2 days before each exam for revision and past-paper mock drills.
+

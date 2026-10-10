@@ -93,6 +93,16 @@ export const RequestDetailPage: React.FC = () => {
         (request.details.affectedSubjectIds || ['sub-cn', 'sub-os']).forEach((subId) => {
           db.recordAttendance(subId, today, 'od');
         });
+      } else if (request.type === 'Attendance correction') {
+        request.comments.push({
+          role: 'Academic Office',
+          author: 'Attendance Coordinator',
+          comment: `Approved. Discrepancy verified against class roll-call. Official college record corrected to ${request.details.expectedStatus || 'Present'}.`,
+          date: new Date().toISOString().split('T')[0],
+        });
+        if (request.details.subjectId && request.details.date) {
+          db.internalCreditOdAttendance(request.details.subjectId, request.details.date);
+        }
       } else {
         request.comments.push({
           role: 'Dean Office',

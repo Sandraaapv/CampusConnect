@@ -138,8 +138,8 @@ export const NewRequestPage: React.FC = () => {
               <label className="text-xs font-extrabold text-[var(--app-text)] uppercase tracking-wider">
                 Select Request Type
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {(['No-dues', 'OD letter', 'Scholarship', 'Event'] as RequestItem['type'][]).map((type) => (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                {(['No-dues', 'OD letter', 'Scholarship', 'Event', 'Attendance correction'] as RequestItem['type'][]).map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -156,6 +156,7 @@ export const NewRequestPage: React.FC = () => {
                       {type === 'OD letter' && 'Attendance credit'}
                       {type === 'Scholarship' && 'Fee concession'}
                       {type === 'Event' && 'Club permission'}
+                      {type === 'Attendance correction' && 'Mismatch report'}
                     </span>
                   </button>
                 ))}

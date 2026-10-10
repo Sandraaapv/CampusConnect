@@ -2,9 +2,20 @@
 // Strictly student-only: No faculty or admin roles, screens, or entities.
 
 import bcrypt from 'bcryptjs';
+import {
+  COLLEGE_SYLLABUS_UNITS,
+  INITIAL_STUDENT_UNIT_PROGRESS,
+  computeCollegeTotalInternal,
+  calculateSafeSkips,
+  calculateClassesToRecover,
+  buildStudyPlan,
+} from './collegeRecords';
+import type { SyllabusUnit, StudyPlanResult } from './collegeRecords';
 
 export interface StudentSettings {
   attendanceThreshold: number; // default 75
+  targetCgpa: number; // default 8.5
+  dailyStudyHours: number; // default 4
   gradingScheme: { grade: string; minPercent: number; points: number }[];
   internalWeight: number; // default 50
   endSemWeight: number; // default 50
@@ -63,16 +74,18 @@ export interface AttendanceRecord {
   subjectId: string;
   date: string; // YYYY-MM-DD
   status: 'present' | 'absent' | 'od';
-  isSelfReported: boolean;
+  source: 'college';
 }
 
 export interface MarkRecord {
   subjectId: string;
   internal1: number; // max 25
   internal2: number; // max 25
-  assignment: number; // max 10 (normalized to internal total 50)
+  assignment: number; // max 10
   totalInternal: number; // max 50
+  maxInternal: 50;
   credits: number;
+  source: 'college';
 }
 
 export interface Assignment {
@@ -128,7 +141,7 @@ export interface DepartmentClearance {
 
 export interface RequestItem {
   id: string;
-  type: 'No-dues' | 'OD letter' | 'Scholarship' | 'Event';
+  type: 'No-dues' | 'OD letter' | 'Scholarship' | 'Event' | 'Attendance correction';
   title: string;
   status: 'Submitted' | 'In Review' | 'Faculty Review' | 'Admin Review' | 'Approved' | 'Rejected';
   submittedDate: string;
@@ -139,6 +152,13 @@ export interface RequestItem {
     clubName?: string;
     reason?: string;
     affectedSubjectIds?: string[];
+    // For Attendance correction:
+    subjectId?: string;
+    subjectCode?: string;
+    date?: string;
+    className?: string;
+    expectedStatus?: string;
+    note?: string;
   };
   departmentStages?: DepartmentClearance[];
   odDaysCredited?: number;
@@ -177,6 +197,8 @@ export interface Notification {
 
 const DEFAULT_SETTINGS: StudentSettings = {
   attendanceThreshold: 75,
+  targetCgpa: 8.5,
+  dailyStudyHours: 4,
   gradingScheme: [
     { grade: 'O (Outstanding)', minPercent: 90, points: 10 },
     { grade: 'A+ (Excellent)', minPercent: 80, points: 9 },
@@ -304,16 +326,10 @@ const SEED_TIMETABLE: TimetableEntry[] = [
   { id: 'tt-11', dayOfWeek: 'Friday', subjectId: 'sub-dsa', subjectCode: 'CS3601', subjectName: 'Data Structures & Algorithms', startTime: '10:15', endTime: '11:15', room: 'Lab-1' },
 ];
 
-// Generate 60 days of historical attendance
+// Generate official historical college attendance
 const generateSeedAttendance = (): AttendanceRecord[] => {
   const records: AttendanceRecord[] = [];
   const subjectList = ['sub-dsa', 'sub-os', 'sub-dbms', 'sub-cn', 'sub-cloud'];
-  // Targets:
-  // DSA: ~88% (attended 37/42)
-  // OS: ~81% (attended 31/38)
-  // DBMS: ~90% (attended 36/40)
-  // CN: ~73.6% (CRITICAL: Below 75% for realism! Attended 28/38)
-  // Cloud: ~85% (attended 29/34)
   const targets: Record<string, { total: number; attended: number }> = {
     'sub-dsa': { total: 42, attended: 37 },
     'sub-os': { total: 38, attended: 31 },
@@ -339,7 +355,7 @@ const generateSeedAttendance = (): AttendanceRecord[] => {
         subjectId: subId,
         date: dateStr,
         status: isPresent ? 'present' : 'absent',
-        isSelfReported: true,
+        source: 'college',
       });
     }
   });
@@ -348,11 +364,56 @@ const generateSeedAttendance = (): AttendanceRecord[] => {
 };
 
 const SEED_MARKS: MarkRecord[] = [
-  { subjectId: 'sub-dsa', internal1: 23, internal2: 24, assignment: 9.5, totalInternal: 47, credits: 4 },
-  { subjectId: 'sub-os', internal1: 20, internal2: 21, assignment: 9.0, totalInternal: 41, credits: 4 },
-  { subjectId: 'sub-dbms', internal1: 24, internal2: 25, assignment: 10, totalInternal: 49, credits: 4 },
-  { subjectId: 'sub-cn', internal1: 17, internal2: 19, assignment: 8.5, totalInternal: 36, credits: 3 }, // low marks
-  { subjectId: 'sub-cloud', internal1: 21, internal2: 22, assignment: 9.0, totalInternal: 43, credits: 3 },
+  {
+    subjectId: 'sub-dsa',
+    internal1: 23,
+    internal2: 24,
+    assignment: 9.5,
+    totalInternal: computeCollegeTotalInternal(23, 24, 9.5),
+    maxInternal: 50,
+    credits: 4,
+    source: 'college',
+  },
+  {
+    subjectId: 'sub-os',
+    internal1: 20,
+    internal2: 21,
+    assignment: 9.0,
+    totalInternal: computeCollegeTotalInternal(20, 21, 9.0),
+    maxInternal: 50,
+    credits: 4,
+    source: 'college',
+  },
+  {
+    subjectId: 'sub-dbms',
+    internal1: 24,
+    internal2: 25,
+    assignment: 10,
+    totalInternal: computeCollegeTotalInternal(24, 25, 10),
+    maxInternal: 50,
+    credits: 4,
+    source: 'college',
+  },
+  {
+    subjectId: 'sub-cn',
+    internal1: 17,
+    internal2: 19,
+    assignment: 8.5,
+    totalInternal: computeCollegeTotalInternal(17, 19, 8.5),
+    maxInternal: 50,
+    credits: 3,
+    source: 'college',
+  },
+  {
+    subjectId: 'sub-cloud',
+    internal1: 21,
+    internal2: 22,
+    assignment: 9.0,
+    totalInternal: computeCollegeTotalInternal(21, 22, 9.0),
+    maxInternal: 50,
+    credits: 3,
+    source: 'college',
+  },
 ];
 
 const SEED_ASSIGNMENTS: Assignment[] = [
@@ -746,36 +807,33 @@ class StudentPortalDB {
     return this.attendance;
   }
 
-  public recordAttendance(subjectId: string, date: string, status: 'present' | 'absent' | 'od') {
-    // Check if record already exists for this subject and date
+  // Internal: Used only when official requests (such as On-Duty letter) are approved
+  public internalCreditOdAttendance(subjectId: string, date: string) {
     const existingIndex = this.attendance.findIndex(
       (a) => a.subjectId === subjectId && a.date === date
     );
 
     if (existingIndex >= 0) {
-      this.attendance[existingIndex].status = status;
+      this.attendance[existingIndex].status = 'od';
     } else {
       this.attendance.push({
         id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         subjectId,
         date,
-        status,
-        isSelfReported: true,
+        status: 'od',
+        source: 'college',
       });
     }
     this.saveAll();
   }
 
-  /**
-   * Verified Attendance Calculations:
-   * threshold = default 0.75 (configurable via settings)
-   * a = attended classes (+ OD credited)
-   * t = total classes held
-   * Safe skips = floor(a / threshold - t)
-   * Classes needed to recover = ceil((threshold * t - a) / (1 - threshold))
-   */
+  public recordAttendance(subjectId: string, date: string, _status: 'present' | 'absent' | 'od') {
+    // Official college records: student role has no write access. Only OD administrative workflow credits days.
+    this.internalCreditOdAttendance(subjectId, date);
+  }
+
   public getAttendanceSummary() {
-    const threshold = (this.user.settings?.attendanceThreshold || 75) / 100;
+    const threshold = this.user.settings?.attendanceThreshold || 75;
 
     return this.subjects.map((sub) => {
       const records = this.attendance.filter((a) => a.subjectId === sub.id);
@@ -783,17 +841,8 @@ class StudentPortalDB {
       const attended = records.filter((a) => a.status === 'present' || a.status === 'od').length;
       const currentPercent = total > 0 ? Number(((attended / total) * 100).toFixed(1)) : 100;
 
-      // Safe skips formula: floor(a / threshold - t)
-      let safeSkips = 0;
-      if (total > 0 && attended / total >= threshold) {
-        safeSkips = Math.max(0, Math.floor(attended / threshold - total));
-      }
-
-      // Recovery needed formula: ceil((threshold * total - attended) / (1 - threshold))
-      let classesNeeded = 0;
-      if (total > 0 && attended / total < threshold) {
-        classesNeeded = Math.max(0, Math.ceil((threshold * total - attended) / (1 - threshold)));
-      }
+      const safeSkips = calculateSafeSkips(attended, total, threshold);
+      const classesNeeded = calculateClassesToRecover(attended, total, threshold);
 
       return {
         subject: sub,
@@ -802,7 +851,7 @@ class StudentPortalDB {
         currentPercent,
         safeSkips,
         classesNeeded,
-        isAtRisk: currentPercent < (this.user.settings?.attendanceThreshold || 75),
+        isAtRisk: currentPercent < threshold,
       };
     });
   }
@@ -812,16 +861,38 @@ class StudentPortalDB {
     return this.marks;
   }
 
-  public updateMark(subjectId: string, updates: Partial<MarkRecord>) {
-    const index = this.marks.findIndex((m) => m.subjectId === subjectId);
-    if (index >= 0) {
-      this.marks[index] = { ...this.marks[index], ...updates };
-      this.marks[index].totalInternal =
-        (this.marks[index].internal1 || 0) +
-        (this.marks[index].internal2 || 0) +
-        (this.marks[index].assignment || 0);
-      this.saveAll();
-    }
+  // Official college records: student role has no write path to internal marks
+  public updateMark(_subjectId: string, _updates: Partial<MarkRecord>) {
+    console.warn('[CollegeRecords] Modification of official internal assessment marks is rejected.');
+    return { error: 'Read-only college records: student write rejected.' };
+  }
+
+  // --- Syllabus Units & Student Progress ---
+  public getSyllabusUnits(): SyllabusUnit[] {
+    return COLLEGE_SYLLABUS_UNITS;
+  }
+
+  public getUnitProgress(): Record<string, boolean> {
+    try {
+      const saved = localStorage.getItem('campusconnect_unit_progress');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { ...INITIAL_STUDENT_UNIT_PROGRESS };
+  }
+
+  public toggleUnitProgress(unitId: string): Record<string, boolean> {
+    const current = this.getUnitProgress();
+    const updated = { ...current, [unitId]: !current[unitId] };
+    try {
+      localStorage.setItem('campusconnect_unit_progress', JSON.stringify(updated));
+    } catch {}
+    return updated;
+  }
+
+  public getStudyPlan(dailyHours?: number): StudyPlanResult {
+    const hours = dailyHours ?? this.user.settings?.dailyStudyHours ?? 4;
+    const progress = this.getUnitProgress();
+    return buildStudyPlan(hours, progress);
   }
 
   /**
@@ -834,8 +905,13 @@ class StudentPortalDB {
 
     return this.subjects.map((sub) => {
       const mark = this.marks.find((m) => m.subjectId === sub.id) || {
+        internal1: 20,
+        internal2: 20,
+        assignment: 8,
         totalInternal: 40,
+        maxInternal: 50 as const,
         credits: sub.credits,
+        source: 'college' as const,
       };
 
       // Find grade threshold corresponding to target CGPA points

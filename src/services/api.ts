@@ -3,7 +3,7 @@
 // Backed by client data store so screens stay 100% decouple from the backend implementation.
 
 import { db } from './db';
-import type { User, AttendanceRecord, MarkRecord, Note, RequestItem, Circular, Notification } from './db';
+import type { User, AttendanceRecord, MarkRecord, Notification } from './db';
 import { authService } from './auth';
 import type { RegisterInput, LoginInput } from './auth';
 
@@ -21,86 +21,53 @@ export const api = {
     return authService.getCurrentUser();
   },
 
-  // --- Attendance Endpoints ---
+  // --- Attendance Endpoints (Read-Only from College Records) ---
   async getAttendance(): Promise<AttendanceRecord[]> {
     return db.getAttendance();
-  },
-
-  async recordAttendance(subjectId: string, date: string, status: 'present' | 'absent' | 'od') {
-    db.recordAttendance(subjectId, date, status);
-    return { success: true };
   },
 
   async getAttendanceSummary() {
     return db.getAttendanceSummary();
   },
 
-  // --- Marks & CGPA Endpoints ---
+  // --- Marks & CGPA Endpoints (Read-Only from College Records) ---
   async getMarks(): Promise<MarkRecord[]> {
     return db.getMarks();
-  },
-
-  async updateMark(subjectId: string, updates: Partial<MarkRecord>) {
-    db.updateMark(subjectId, updates);
-    return { success: true };
   },
 
   async predictMarks(targetCgpa: number) {
     return db.predictEndSemMarks(targetCgpa);
   },
 
-  // --- Circulars Endpoints ---
-  async getCirculars(_dept?: string, _sem?: number, q?: string): Promise<Circular[]> {
-    return db.getCirculars(q);
+  // --- Student Settings Endpoints (GET / PUT /settings) ---
+  async getSettings() {
+    return db.getUser().settings;
   },
 
-  // --- Notes & PYQ Endpoints ---
-  async getNotes(subjectCode?: string): Promise<Note[]> {
-    return db.getNotes(subjectCode);
+  async updateSettings(updates: Partial<User['settings']>) {
+    return db.updateUserSettings(updates);
   },
 
-  async upvoteNote(noteId: string): Promise<Note | undefined> {
-    return db.upvoteNote(noteId);
+  // --- Syllabus Endpoints (GET /syllabus/units, PUT /syllabus/progress) ---
+  async getSyllabusUnits() {
+    return db.getSyllabusUnits();
   },
 
-  async uploadNote(note: Omit<Note, 'id' | 'upvotes' | 'upvotedBy' | 'uploadedDate'>): Promise<Note> {
-    return db.addNote(note);
+  async getUnitProgress() {
+    return db.getUnitProgress();
   },
 
-  // --- Approval Tracker Endpoints ---
-  async getRequests(): Promise<RequestItem[]> {
-    return db.getRequests();
+  async updateUnitProgress(unitId: string) {
+    return db.toggleUnitProgress(unitId);
   },
 
-  async getRequestById(id: string): Promise<RequestItem | undefined> {
-    return db.getRequestById(id);
-  },
-
-  async createRequest(data: Omit<RequestItem, 'id' | 'status' | 'submittedDate' | 'comments' | 'verificationToken'>): Promise<RequestItem> {
-    return db.createRequest(data);
-  },
-
-  // --- Exams & Study Planner Endpoints ---
+  // --- Exams & Study Planner Endpoints (GET /exams, GET /exams/plan) ---
   async getExams() {
     return db.getExams();
   },
 
-  async generateStudyPlan(dailyHours: number) {
-    const exams = db.getExams();
-    const marks = db.getMarks();
-    const subjects = db.getSubjects();
-
-    // Allocate study hours inversely proportional to internal mark strength and syllabus coverage
-    return subjects.map((sub) => {
-      const mark = marks.find((m) => m.subjectId === sub.id)?.totalInternal || 40;
-      const weaknessWeight = Math.max(1, 50 - mark) + Math.max(1, 100 - sub.syllabusCoveragePercent) * 0.5;
-      return {
-        subject: sub,
-        exam: exams.find((e) => e.subjectId === sub.id),
-        allocatedDailyHours: Number(((weaknessWeight / 70) * (dailyHours / subjects.length) * 2).toFixed(1)),
-        suggestedFocus: mark < 40 ? 'High Priority: Weak Internal Scores' : 'Revision & PYQ Practice',
-      };
-    });
+  async getExamPlan(dailyHours?: number) {
+    return db.getStudyPlan(dailyHours);
   },
 
   // --- Badges, Streak, Wrapped ---
