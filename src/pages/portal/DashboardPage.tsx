@@ -350,10 +350,6 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-                <span className="px-2 py-0.5 rounded-full bg-[var(--app-surface-subtle)] text-[var(--app-text-muted)] font-bold text-[10.5px] border border-[var(--app-border)]">
-                  Not yet recorded
-                </span>
-
           {/* Right Column (1/3): DUE SOON + EXAMS + CIRCULARS */}
           <div className="space-y-3.5">
             {/* 1. DUE SOON Card */}
