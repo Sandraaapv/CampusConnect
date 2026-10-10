@@ -180,12 +180,12 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
     <div className="min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] font-sans flex flex-col selection:bg-amber-300 selection:text-black transition-colors duration-200">
       <div className="flex flex-1 min-h-0">
         {/* =========================================================================
-            LEFT SIDEBAR (FULL HEIGHT STICKY 100dvh AT >= 900px)
+            LEFT SIDEBAR (FULL HEIGHT FIXED 100dvh AT >= 900px)
             Pinned top logo, scrollable nav with edge fade mask, pinned bottom actions
             ========================================================================= */}
         <aside
-          className="portal-sidebar-desktop flex flex-col justify-between w-64 shrink-0 bg-[var(--app-surface)] border-r border-[var(--app-border)] sticky top-0 z-30 transition-all duration-200"
-          style={{ height: '100dvh', maxHeight: '100dvh', minHeight: '100vh' }}
+          className="portal-sidebar-desktop flex flex-col justify-between w-64 shrink-0 bg-[var(--app-surface)] border-r border-[var(--app-border)] fixed top-0 left-0 bottom-0 z-30 transition-all duration-200"
+          style={{ height: '100dvh', maxHeight: '100dvh' }}
         >
           {/* Pinned Top Logo Zone */}
           <div className="p-4 pb-2 shrink-0">
@@ -360,7 +360,7 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
         {/* =========================================================================
             MAIN CONTENT AREA
             ========================================================================= */}
-        <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-6">
+        <div className="portal-main-content flex-1 flex flex-col min-w-0 pb-20 min-[900px]:pb-6">
           {/* Mobile Top Bar (< 900px) */}
           <div className="portal-sidebar-mobile items-center justify-between p-4 border-b border-[var(--app-border)] bg-[var(--app-surface)]">
             <div className="flex items-center gap-2">
@@ -452,7 +452,7 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
           MOBILE BOTTOM TAB BAR (< 900px)
           Five main items: Dashboard, Attendance, Timetable, Approvals, More
           ========================================================================= */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 bg-[var(--app-surface)] border-t border-[var(--app-border)] z-40 px-3 py-2 flex items-center justify-around shadow-lg">
+      <div className="portal-bottom-bar fixed bottom-0 inset-x-0 bg-[var(--app-surface)] border-t border-[var(--app-border)] z-40 px-3 py-2 flex items-center justify-around shadow-lg">
         <button
           type="button"
           onClick={() => navigate('/dashboard')}
@@ -517,7 +517,7 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
           Lists all portal sections grouped exactly as the sidebar
           ========================================================================= */}
       {mobileMoreSheetOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="portal-bottom-bar fixed inset-0 z-50 flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"

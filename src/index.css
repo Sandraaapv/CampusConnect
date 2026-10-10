@@ -86,8 +86,24 @@
 @media (min-width: 900px) {
   .portal-sidebar-desktop {
     display: flex !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 16rem !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 30 !important;
+  }
+  .portal-main-content {
+    margin-left: 16rem !important;
+    width: calc(100% - 16rem) !important;
+    min-width: 0 !important;
   }
   .portal-sidebar-mobile {
+    display: none !important;
+  }
+  .portal-bottom-bar {
     display: none !important;
   }
 }
@@ -98,6 +114,13 @@
   }
   .portal-sidebar-mobile {
     display: flex !important;
+  }
+  .portal-bottom-bar {
+    display: flex !important;
+  }
+  .portal-main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
   }
 }
 
