@@ -149,4 +149,102 @@ export const api = {
   async getDashboard() {
     return db.getDashboardData();
   },
+
+  // --- Timetable Endpoints (Read-Only College Records) ---
+  async getTimetable() {
+    return db.getTimetableSlots();
+  },
+
+  async getTodayTimetable(dayOverride?: any) {
+    return db.getTodayTimetable(dayOverride);
+  },
+
+  async getClassChanges() {
+    return db.getClassChanges();
+  },
+
+  async getTimetableIcs() {
+    return db.getTimetableIcs();
+  },
+
+  // --- Fees Endpoints (Read-Only College Records) ---
+  async getFees(semester?: number) {
+    return db.getFeeStatusSummary(semester);
+  },
+
+  async getFeePayments(semester?: number) {
+    return db.getFeePayments(semester);
+  },
+
+  async getFeeReceipt(id: string) {
+    return db.getFeeReceiptById(id);
+  },
+
+  async verifyReceiptToken(token: string) {
+    const receipt = db.getFeeReceiptByToken(token);
+    if (!receipt) return { valid: false };
+    return {
+      valid: true,
+      receipt,
+      student: {
+        name: db.getUser().name,
+        registerNumber: db.getUser().registerNumber,
+        department: db.getUser().department,
+      },
+    };
+  },
+
+  // --- Faculty Directory Endpoints (Read-Only College Records) ---
+  async getFaculty() {
+    return db.getFacultyList();
+  },
+
+  async getMyFaculty() {
+    return db.getMyFaculty();
+  },
+
+  async getFacultyById(id: string) {
+    return db.getFacultyById(id);
+  },
+
+  // --- Course Feedback Endpoints (Anonymity by Design) ---
+  async getFeedbackForms() {
+    return db.getFeedbackForms();
+  },
+
+  async getFeedbackQuestions() {
+    return db.getFeedbackQuestions();
+  },
+
+  async submitFeedback(formId: string, answers: Record<string, number>, comment?: string) {
+    return db.submitFeedback(formId, answers, comment);
+  },
+
+  // --- Helpdesk Endpoints (Student Issue Tracking & Simulated Support) ---
+  async getHelpdeskTickets() {
+    return db.getHelpdeskTickets();
+  },
+
+  async getHelpdeskTicket(id: string) {
+    return db.getHelpdeskTicketById(id);
+  },
+
+  async createHelpdeskTicket(input: {
+    category: any;
+    priority: any;
+    title: string;
+    description: string;
+    location: string;
+    attachments?: any[];
+  }) {
+    return db.createHelpdeskTicket(input);
+  },
+
+  async addHelpdeskComment(ticketId: string, message: string) {
+    return db.addHelpdeskComment(ticketId, message);
+  },
+
+  async updateHelpdeskTicket(ticketId: string, action: 'reopen' | 'close', rating?: number) {
+    return db.updateHelpdeskTicket(ticketId, action, rating);
+  },
 };

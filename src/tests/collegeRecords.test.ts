@@ -193,4 +193,136 @@ describe('College Records & Academic Calculations', () => {
       expect(cgpaWithoutArrearsInCredits).toBe(7.0);
     });
   });
+
+  describe('Section 3: Fee Status & Overdue Logic', () => {
+    it('returns "Paid" when balance due is zero', async () => {
+      const { getFeeStatus } = await import('../services/collegeRecords');
+      expect(getFeeStatus(0, '2026-10-20')).toBe('Paid');
+    });
+
+    it('returns "Due soon" when balance is due within 7 days', async () => {
+      const { getFeeStatus } = await import('../services/collegeRecords');
+      const futureDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      expect(getFeeStatus(15000, futureDate)).toBe('Due soon');
+    });
+
+    it('returns "Overdue" when balance is due and due date has passed', async () => {
+      const { getFeeStatus } = await import('../services/collegeRecords');
+      const pastDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      expect(getFeeStatus(20000, pastDate)).toBe('Overdue');
+    });
+  });
+
+  describe('Section 2: Free-Slot Calculation & Timetable Suggestions', () => {
+    it('identifies free period slots accurately', async () => {
+      const { calculateFreeSlots, COLLEGE_TIMETABLE_SLOTS } = await import('../services/collegeRecords');
+      const freeSlots = calculateFreeSlots(COLLEGE_TIMETABLE_SLOTS, 'Monday');
+      // On Monday, period 5 is free
+      expect(freeSlots.length).toBeGreaterThan(0);
+      const freePeriods = freeSlots.map((s) => s.period);
+      expect(freePeriods).toContain(5);
+    });
+  });
+
+  describe('Section 4: Faculty Office Hours & "Available Now"', () => {
+    it('evaluates available now accurately according to day and time range', async () => {
+      const { isFacultyAvailableNow } = await import('../services/collegeRecords');
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayDay = days[new Date().getDay()];
+
+      const mockFaculty = {
+        id: 'test-fac',
+        name: 'Dr. Test',
+        designation: 'Professor',
+        department: 'CSE',
+        email: 'test@college.edu',
+        cabin: 'LH-101',
+        bio: 'Test bio',
+        specializations: ['Testing'],
+        subjects: [],
+        officeHours: [
+          { day: todayDay as any, start: '00:00', end: '23:59' },
+        ],
+      };
+
+      expect(isFacultyAvailableNow(mockFaculty)).toBe(true);
+
+      const unavailableFaculty = {
+        ...mockFaculty,
+        officeHours: [
+          { day: (todayDay === 'Sunday' ? 'Monday' : 'Sunday') as any, start: '09:00', end: '10:00' },
+        ],
+      };
+      expect(isFacultyAvailableNow(unavailableFaculty)).toBe(false);
+    });
+  });
+
+  describe('Section 5: Course Feedback Duplicate Guard & Anonymity by Design', () => {
+    it('blocks duplicate submission for the same form and student', async () => {
+      const { db } = await import('../services/db');
+      const forms = db.getFeedbackForms();
+      const targetForm = forms.find((f) => f.status === 'pending') || forms[0];
+
+      // First submission succeeds
+      const res1 = db.submitFeedback(targetForm.id, { 'q1': 5, 'q2': 5 }, 'Great class');
+      expect(res1.success).toBe(true);
+
+      // Duplicate submission is rejected
+      const res2 = db.submitFeedback(targetForm.id, { 'q1': 4, 'q2': 4 });
+      expect(res2.success).toBe(false);
+      expect(res2.error).toContain('Duplicate submission rejected');
+    });
+
+    it('enforces anonymity: feedback response record contains NO studentId', async () => {
+      const { db } = await import('../services/db');
+      const response = (db as any).feedbackResponses[0];
+      if (response) {
+        expect(response.studentId).toBeUndefined();
+        expect(response.userId).toBeUndefined();
+        expect(response.student_id).toBeUndefined();
+      }
+    });
+  });
+
+  describe('Section 6: Helpdesk Ticket Status Transitions & Rate Limiting', () => {
+    it('rate limits ticket creation to 5 per day', async () => {
+      const { db } = await import('../services/db');
+      // Create tickets until limit
+      let hitLimit = false;
+      for (let i = 0; i < 6; i++) {
+        const res = db.createHelpdeskTicket({
+          category: 'Wi-Fi / Network',
+          priority: 'Medium',
+          title: `Test Ticket ${i}`,
+          description: 'Testing rate limit',
+          location: 'Hostel A',
+        });
+        if (!res.success && res.error?.includes('Daily limit reached')) {
+          hitLimit = true;
+          break;
+        }
+      }
+      expect(hitLimit).toBe(true);
+    });
+
+    it('updates ticket status on closure and records student satisfaction rating', async () => {
+      const { db } = await import('../services/db');
+      const tickets = db.getHelpdeskTickets();
+      if (tickets.length > 0) {
+        const tkt = tickets[0];
+        const res = db.updateHelpdeskTicket(tkt.id, 'close', 5);
+        expect(res.success).toBe(true);
+        expect(db.getHelpdeskTicketById(tkt.id)?.ticket.status).toBe('Closed');
+        expect(db.getHelpdeskTicketById(tkt.id)?.ticket.rating).toBe(5);
+      }
+    });
+
+    it('rejects student write attempts to read-only college records', async () => {
+      const { db } = await import('../services/db');
+      expect(db.updateTimetable().error).toContain('Read-only college records');
+      expect(db.updateFees().error).toContain('Read-only college records');
+      expect(db.updateFaculty().error).toContain('Read-only college records');
+      expect(db.updateFeedbackForm().error).toContain('Read-only college records');
+    });
+  });
 });

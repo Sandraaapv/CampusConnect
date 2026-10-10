@@ -286,6 +286,11 @@ export const SettingsPage: React.FC = () => {
             {[
               { key: 'lowAttendance', label: 'Attendance Risk Alerts (Drops near 75%)' },
               { key: 'approachingDeadlines', label: 'Assignment & Quiz Deadlines within 48h' },
+              { key: 'classChanged', label: 'Timetable & Class Changes (Cancelled, Rescheduled, Room Changes)' },
+              { key: 'feeDue', label: 'Fee Due Reminders (Due in 7 days)' },
+              { key: 'feeOverdue', label: 'Fee Overdue Warnings' },
+              { key: 'feedbackClosing', label: 'Course Feedback Form Deadlines (Closing in 3 days)' },
+              { key: 'helpdeskUpdate', label: 'Helpdesk Ticket Updates & Technician Notes' },
               { key: 'requestStatus', label: 'Approval Status Updates & Department Clearance Stamps' },
               { key: 'circulars', label: 'Official College Circulars for Your Department' },
               { key: 'newBadges', label: 'New Badges & Streak Milestones Earned' },

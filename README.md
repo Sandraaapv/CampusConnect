@@ -112,7 +112,36 @@ CampusConnect features a complete **Student Portal** (behind the "Sign in" flow)
 - **Automated Day-by-Day Plan**:
   - Dynamically builds a 7-day schedule allocating uncovered units across days before each exam.
   - Generates distinct units on different days (no repeating identical task blocks).
-  - Weights study hours toward nearer exams, lower internal marks, and remaining syllabus volume.
-  - Respects the daily study hours cap (default 4h, configurable in Settings).
-  - Automatically reserves the final 1–2 days before each exam for revision and past-paper mock drills.
+### 4. Five New Student Portal Sections
 
+1. **Timetable (`/timetable`)**:
+   - Official weekly grid (Monday–Saturday) with period rows and room/faculty allocations from college records.
+   - Highlights today's column and current period with a "Now" marker.
+   - Free slots show duration and link to study planner tasks.
+   - View switch (Week | Day), with Day view default on mobile.
+   - Class changes (Cancelled, Rescheduled, Room changed) highlighted with badges and synced to Dashboard Today card.
+   - Download `.ics` calendar export for external device calendars.
+
+2. **Fees (`/fees`)**:
+   - Semester summary card (total fee, paid, balance due, due date, status chip: Paid, Due soon, Overdue).
+   - Accounts clearance in the No-dues tracker automatically reflects fee status (blocked if balance > 0).
+   - Payment history table with downloadable verified receipt PDFs featuring verification QR code pointing to `/receipts/verify/:token`.
+   - **Payment Note**: No real payments are processed directly in CampusConnect. When a college portal URL is configured, students can click "Pay on the college portal" to complete transactions externally.
+
+3. **Faculty Directory (`/faculty`)**:
+   - Two tabs: "My faculty" (current teachers with subject chips) and "All faculty".
+   - Debounced search (name, subject, specialization, cabin) and department filtering with clear-filter actions.
+   - Real-time "Available now" indicator using local timezone based on weekly office hours.
+   - Contact via official college email (`mailto:` and copy button) with zero personal phone numbers. Detail drawer displays full office hours schedules.
+
+4. **Course Feedback (`/feedback`)**:
+   - Structured 1-to-5 rating questions and optional comment with character limit.
+   - **Anonymity by Design**: Responses are stored strictly without any `student_id`. A separate, non-joinable submission receipt (`student_id`, `form_id`, `submitted_at`) is maintained purely to prevent duplicate submissions and track portal completion tasks.
+   - Pre-submission review dialog ensures deliberate, final feedback.
+
+5. **Helpdesk (`/helpdesk`)**:
+   - Student issue and query ticketing across categories (Wi-Fi/Network, Hostel Maintenance, Library, Transport, Admin) distinct from formal Approvals.
+   - Supports up to 3 image attachments (validated for image types and 5MB size limits).
+   - Real-time resolution timeline (`Open` → `Assigned` → `In progress` → `Resolved` → `Closed`) and comment thread.
+   - Rate-limited to 5 ticket submissions per day per authenticated student.
+   - **Simulated Support**: Automated background technician dispatch simulates assignment and progress updates with canned field remarks for realistic end-to-end demonstration.

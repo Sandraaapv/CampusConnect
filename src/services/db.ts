@@ -11,6 +11,22 @@ import {
   buildStudyPlan,
   getAcademicHistoryForStudent,
   calculateCumulativeCgpa,
+  COLLEGE_TIMETABLE_SLOTS,
+  COLLEGE_CLASS_CHANGES,
+  COLLEGE_FEE_STRUCTURES,
+  COLLEGE_FEE_PAYMENTS,
+  COLLEGE_FEE_RECEIPTS,
+  COLLEGE_FACULTY,
+  COLLEGE_FEEDBACK_FORMS,
+  COLLEGE_FEEDBACK_QUESTIONS,
+  INITIAL_FEEDBACK_RESPONSES,
+  INITIAL_FEEDBACK_SUBMISSIONS,
+  SEED_HELPDESK_TICKETS,
+  SEED_HELPDESK_COMMENTS,
+  getFeeStatus,
+  generateIcsCalendar,
+  COLLEGE_PAYMENT_PORTAL_URL,
+  SEMESTER_6_FEE_DUE_DATE,
 } from './collegeRecords';
 import type {
   SyllabusUnit,
@@ -18,9 +34,45 @@ import type {
   PastSubjectRecord,
   PastSemesterRecord,
   AcademicHistoryConfig,
+  TimetableSlot,
+  ClassChange,
+  FeeStructureItem,
+  FeePaymentRecord,
+  FeeReceipt,
+  FacultyMember,
+  FacultyOfficeHour,
+  FeedbackForm,
+  FeedbackQuestion,
+  FeedbackResponse,
+  FeedbackSubmission,
+  HelpdeskTicket,
+  HelpdeskComment,
+  HelpdeskAttachment,
+  HelpdeskEvent,
+  DayOfWeek,
 } from './collegeRecords';
 
-export type { PastSubjectRecord, PastSemesterRecord, AcademicHistoryConfig };
+export type {
+  PastSubjectRecord,
+  PastSemesterRecord,
+  AcademicHistoryConfig,
+  TimetableSlot,
+  ClassChange,
+  FeeStructureItem,
+  FeePaymentRecord,
+  FeeReceipt,
+  FacultyMember,
+  FacultyOfficeHour,
+  FeedbackForm,
+  FeedbackQuestion,
+  FeedbackResponse,
+  FeedbackSubmission,
+  HelpdeskTicket,
+  HelpdeskComment,
+  HelpdeskAttachment,
+  HelpdeskEvent,
+  DayOfWeek,
+};
 
 export interface StudentSettings {
   attendanceThreshold: number; // default 75
@@ -35,6 +87,11 @@ export interface StudentSettings {
     requestStatus: boolean;
     circulars: boolean;
     newBadges: boolean;
+    classChanged?: boolean;
+    feeDue?: boolean;
+    feeOverdue?: boolean;
+    feedbackClosing?: boolean;
+    helpdeskUpdate?: boolean;
   };
 }
 
@@ -193,7 +250,17 @@ export interface Badge {
 
 export interface Notification {
   id: string;
-  type: 'attendance' | 'deadline' | 'circular' | 'request' | 'badge';
+  type:
+    | 'attendance'
+    | 'deadline'
+    | 'circular'
+    | 'request'
+    | 'badge'
+    | 'class_changed'
+    | 'fee_due'
+    | 'fee_overdue'
+    | 'feedback_closing'
+    | 'helpdesk_update';
   title: string;
   message: string;
   date: string;
@@ -225,6 +292,11 @@ const DEFAULT_SETTINGS: StudentSettings = {
     requestStatus: true,
     circulars: false,
     newBadges: true,
+    classChanged: true,
+    feeDue: true,
+    feeOverdue: true,
+    feedbackClosing: true,
+    helpdeskUpdate: true,
   },
 };
 
@@ -674,7 +746,11 @@ const STORAGE_KEYS = {
   REQUESTS: 'campusconnect_student_requests_v2',
   BADGES: 'campusconnect_student_badges_v2',
   NOTIFICATIONS: 'campusconnect_student_notifications_v2',
-  SEEDED: 'campusconnect_portal_seeded_v2',
+  FEEDBACK_RESPONSES: 'campusconnect_feedback_responses_v2',
+  FEEDBACK_SUBMISSIONS: 'campusconnect_feedback_submissions_v2',
+  HELPDESK_TICKETS: 'campusconnect_helpdesk_tickets_v2',
+  HELPDESK_COMMENTS: 'campusconnect_helpdesk_comments_v2',
+  SEEDED: 'campusconnect_portal_seeded_v3',
 };
 
 class StudentPortalDB {
@@ -690,10 +766,15 @@ class StudentPortalDB {
   private requests: RequestItem[] = SEED_REQUESTS;
   private badges: Badge[] = SEED_BADGES;
   private notifications: Notification[] = SEED_NOTIFICATIONS;
+  private feedbackResponses: FeedbackResponse[] = INITIAL_FEEDBACK_RESPONSES;
+  private feedbackSubmissions: FeedbackSubmission[] = INITIAL_FEEDBACK_SUBMISSIONS;
+  private helpdeskTickets: HelpdeskTicket[] = SEED_HELPDESK_TICKETS;
+  private helpdeskComments: HelpdeskComment[] = SEED_HELPDESK_COMMENTS;
 
   constructor() {
     this.init();
     this.startSimulatedApprovalEngine();
+    this.startSimulatedHelpdeskEngine();
   }
 
   private init() {
@@ -722,6 +803,10 @@ class StudentPortalDB {
     this.requests = [...SEED_REQUESTS];
     this.badges = [...SEED_BADGES];
     this.notifications = [...SEED_NOTIFICATIONS];
+    this.feedbackResponses = [...INITIAL_FEEDBACK_RESPONSES];
+    this.feedbackSubmissions = [...INITIAL_FEEDBACK_SUBMISSIONS];
+    this.helpdeskTickets = [...SEED_HELPDESK_TICKETS];
+    this.helpdeskComments = [...SEED_HELPDESK_COMMENTS];
     this.saveAll();
     try {
       localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
@@ -744,6 +829,10 @@ class StudentPortalDB {
       const req = localStorage.getItem(STORAGE_KEYS.REQUESTS);
       const bdg = localStorage.getItem(STORAGE_KEYS.BADGES);
       const not = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      const fbr = localStorage.getItem(STORAGE_KEYS.FEEDBACK_RESPONSES);
+      const fbs = localStorage.getItem(STORAGE_KEYS.FEEDBACK_SUBMISSIONS);
+      const hdt = localStorage.getItem(STORAGE_KEYS.HELPDESK_TICKETS);
+      const hdc = localStorage.getItem(STORAGE_KEYS.HELPDESK_COMMENTS);
 
       if (u) this.user = JSON.parse(u);
       if (sub) this.subjects = JSON.parse(sub);
@@ -757,6 +846,10 @@ class StudentPortalDB {
       if (req) this.requests = JSON.parse(req);
       if (bdg) this.badges = JSON.parse(bdg);
       if (not) this.notifications = JSON.parse(not);
+      if (fbr) this.feedbackResponses = JSON.parse(fbr);
+      if (fbs) this.feedbackSubmissions = JSON.parse(fbs);
+      if (hdt) this.helpdeskTickets = JSON.parse(hdt);
+      if (hdc) this.helpdeskComments = JSON.parse(hdc);
     } catch {
       this.resetToDefaults();
     }
@@ -776,6 +869,10 @@ class StudentPortalDB {
       localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(this.requests));
       localStorage.setItem(STORAGE_KEYS.BADGES, JSON.stringify(this.badges));
       localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(this.notifications));
+      localStorage.setItem(STORAGE_KEYS.FEEDBACK_RESPONSES, JSON.stringify(this.feedbackResponses));
+      localStorage.setItem(STORAGE_KEYS.FEEDBACK_SUBMISSIONS, JSON.stringify(this.feedbackSubmissions));
+      localStorage.setItem(STORAGE_KEYS.HELPDESK_TICKETS, JSON.stringify(this.helpdeskTickets));
+      localStorage.setItem(STORAGE_KEYS.HELPDESK_COMMENTS, JSON.stringify(this.helpdeskComments));
     } catch {
       // ignore
     }
@@ -1084,10 +1181,20 @@ class StudentPortalDB {
           });
           changed = true;
         } else if (req.status === 'In Review' || req.status === 'Faculty Review') {
-          // If No-dues, sequentially stamp departments
+          // If No-dues, sequentially stamp departments, checking Accounts fee status
           if (req.type === 'No-dues' && req.departmentStages) {
             const nextUncleared = req.departmentStages.find((s) => !s.cleared);
             if (nextUncleared) {
+              if (nextUncleared.department === 'Accounts') {
+                const feeSummary = this.getFeeStatusSummary(this.user.semester);
+                if (feeSummary.balanceDue > 0) {
+                  // Blocked due to fee balance outstanding!
+                  nextUncleared.cleared = false;
+                  nextUncleared.remarks = `Fees due: ₹${feeSummary.balanceDue.toLocaleString()} pending for Semester ${this.user.semester}. Clear fees before approval.`;
+                  changed = true;
+                  return;
+                }
+              }
               nextUncleared.cleared = true;
               nextUncleared.clearedAt = new Date().toISOString().split('T')[0];
               nextUncleared.remarks = `${nextUncleared.department} verified no outstanding dues.`;
@@ -1145,6 +1252,396 @@ class StudentPortalDB {
     }, 15000); // Check every 15s
   }
 
+  /**
+   * Simulated Helpdesk Response Engine:
+   * Advances Open -> Assigned -> In progress after delays, adding simulated support comments!
+   */
+  private startSimulatedHelpdeskEngine() {
+    setInterval(() => {
+      let changed = false;
+      this.helpdeskTickets.forEach((tkt) => {
+        if (tkt.status === 'Open') {
+          tkt.status = 'Assigned';
+          tkt.updatedAt = new Date().toISOString();
+          const comment: HelpdeskComment = {
+            id: `com-sim-${Date.now()}`,
+            ticketId: tkt.id,
+            authorType: 'support',
+            authorName: `${tkt.assignedDepartment} Helpdesk`,
+            message: `Ticket assigned to primary field technician. Inspection scheduled today.`,
+            createdAt: new Date().toISOString(),
+          };
+          this.helpdeskComments.push(comment);
+          this.notifications.unshift({
+            id: `notif-hd-${Date.now()}`,
+            type: 'helpdesk_update',
+            title: `Ticket Assigned: ${tkt.ticketNumber}`,
+            message: `Your ticket has been assigned to ${tkt.assignedDepartment}.`,
+            date: 'Just now',
+            read: false,
+            link: '/helpdesk',
+          });
+          changed = true;
+        } else if (tkt.status === 'Assigned') {
+          tkt.status = 'In progress';
+          tkt.updatedAt = new Date().toISOString();
+          const comment: HelpdeskComment = {
+            id: `com-sim-${Date.now()}`,
+            ticketId: tkt.id,
+            authorType: 'support',
+            authorName: `${tkt.assignedDepartment} Engineering`,
+            message: `Technician has arrived at location: ${tkt.location}. Diagnostics underway.`,
+            createdAt: new Date().toISOString(),
+          };
+          this.helpdeskComments.push(comment);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        this.saveAll();
+      }
+    }, 20000); // Check every 20s
+  }
+
+  // --- TIMETABLE & CLASS CHANGES (READ-ONLY COLLEGE RECORDS) ---
+  public getTimetableSlots(): TimetableSlot[] {
+    return COLLEGE_TIMETABLE_SLOTS;
+  }
+
+  public getClassChanges(): ClassChange[] {
+    return COLLEGE_CLASS_CHANGES;
+  }
+
+  public getTodayTimetable(dayOverride?: DayOfWeek): (TimetableSlot & { change?: ClassChange })[] {
+    const days: DayOfWeek[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as unknown as DayOfWeek[];
+    const todayDayName = dayOverride || days[new Date().getDay()] || 'Monday';
+    const effectiveDay: DayOfWeek = todayDayName === ('Sunday' as DayOfWeek) ? 'Monday' : todayDayName;
+
+    const daySlots = COLLEGE_TIMETABLE_SLOTS.filter((s) => s.day === effectiveDay);
+    return daySlots.map((slot) => {
+      const change = COLLEGE_CLASS_CHANGES.find((cc) => cc.slotId === slot.id);
+      return {
+        ...slot,
+        change,
+      };
+    });
+  }
+
+  public getTimetableIcs(): string {
+    return generateIcsCalendar(COLLEGE_TIMETABLE_SLOTS, this.user.name);
+  }
+
+  // Read-only rejection
+  public updateTimetable() {
+    return { error: 'Read-only college records: student write rejected.' };
+  }
+
+  // --- FEES & RECEIPTS (READ-ONLY COLLEGE RECORDS) ---
+  public getFeeStructures(semester?: number): FeeStructureItem[] {
+    const sem = semester ?? this.user.semester;
+    return COLLEGE_FEE_STRUCTURES.filter((fs) => fs.semester === sem);
+  }
+
+  public getFeePayments(semester?: number): FeePaymentRecord[] {
+    const sem = semester ?? this.user.semester;
+    return COLLEGE_FEE_PAYMENTS.filter((fp) => fp.semester === sem);
+  }
+
+  public getFeeReceipts(): FeeReceipt[] {
+    return COLLEGE_FEE_RECEIPTS;
+  }
+
+  public getFeeReceiptById(id: string): FeeReceipt | undefined {
+    return COLLEGE_FEE_RECEIPTS.find((r) => r.id === id || r.paymentId === id);
+  }
+
+  public getFeeReceiptByToken(token: string): FeeReceipt | undefined {
+    return COLLEGE_FEE_RECEIPTS.find((r) => r.verifyToken === token);
+  }
+
+  public getFeeStatusSummary(semester?: number) {
+    const sem = semester ?? this.user.semester;
+    const structures = this.getFeeStructures(sem);
+    const payments = this.getFeePayments(sem);
+
+    const totalFee = structures.reduce((sum, item) => sum + item.amount, 0);
+    const paid = payments
+      .filter((p) => p.status === 'success')
+      .reduce((sum, p) => sum + p.amount, 0);
+    const balanceDue = Math.max(0, totalFee - paid);
+    const dueDate = SEMESTER_6_FEE_DUE_DATE;
+    const status = getFeeStatus(balanceDue, dueDate);
+
+    return {
+      semester: sem,
+      totalFee,
+      paid,
+      balanceDue,
+      dueDate,
+      status,
+      paymentPortalUrl: COLLEGE_PAYMENT_PORTAL_URL,
+      breakdown: structures,
+      payments,
+    };
+  }
+
+  // Read-only rejection
+  public updateFees() {
+    return { error: 'Read-only college records: student write rejected.' };
+  }
+
+  // --- FACULTY DIRECTORY (READ-ONLY COLLEGE RECORDS) ---
+  public getFacultyList(): FacultyMember[] {
+    return COLLEGE_FACULTY;
+  }
+
+  public getMyFaculty(): FacultyMember[] {
+    return COLLEGE_FACULTY.filter((f) =>
+      f.subjects.some((s) => this.subjects.some((sub) => sub.code === s.code || sub.name.includes(s.name)))
+    );
+  }
+
+  public getFacultyById(id: string): FacultyMember | undefined {
+    return COLLEGE_FACULTY.find((f) => f.id === id);
+  }
+
+  // Read-only rejection
+  public updateFaculty() {
+    return { error: 'Read-only college records: student write rejected.' };
+  }
+
+  // --- COURSE FEEDBACK (ANONYMITY BY DESIGN) ---
+  public getFeedbackForms(): FeedbackForm[] {
+    return COLLEGE_FEEDBACK_FORMS.map((form) => {
+      const isSubmitted = this.feedbackSubmissions.some(
+        (sub) => sub.studentId === this.user.id && sub.formId === form.id
+      );
+      return {
+        ...form,
+        status: isSubmitted ? 'submitted' : form.status,
+      };
+    });
+  }
+
+  public getFeedbackQuestions(): FeedbackQuestion[] {
+    return COLLEGE_FEEDBACK_QUESTIONS;
+  }
+
+  public submitFeedback(
+    formId: string,
+    answers: Record<string, number>,
+    comment?: string
+  ): { success: boolean; error?: string } {
+    // 1. Guard against duplicate submission
+    const alreadySubmitted = this.feedbackSubmissions.some(
+      (sub) => sub.studentId === this.user.id && sub.formId === formId
+    );
+    if (alreadySubmitted) {
+      return { success: false, error: 'Duplicate submission rejected: Course feedback already submitted.' };
+    }
+
+    // 2. Store response strictly WITHOUT student_id (Anonymity by design)
+    const response: FeedbackResponse = {
+      id: `fbr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      formId,
+      answers,
+      comment: comment?.trim() ? comment.trim() : undefined,
+      createdAt: new Date().toISOString(),
+    };
+    this.feedbackResponses.push(response);
+
+    // 3. Store separate submission receipt ONLY with student_id + form_id to prevent duplicates
+    const submission: FeedbackSubmission = {
+      id: `fbs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      studentId: this.user.id,
+      formId,
+      submittedAt: new Date().toISOString(),
+    };
+    this.feedbackSubmissions.push(submission);
+
+    this.saveAll();
+    return { success: true };
+  }
+
+  // Read-only rejection
+  public updateFeedbackForm() {
+    return { error: 'Read-only college records: student write rejected.' };
+  }
+
+  // --- HELPDESK TICKETS & SIMULATED SUPPORT ---
+  public getHelpdeskTickets(): HelpdeskTicket[] {
+    return this.helpdeskTickets.filter((t) => t.studentId === this.user.id);
+  }
+
+  public getHelpdeskTicketById(id: string): { ticket: HelpdeskTicket; comments: HelpdeskComment[] } | undefined {
+    const ticket = this.helpdeskTickets.find((t) => t.id === id && t.studentId === this.user.id);
+    if (!ticket) return undefined;
+    const comments = this.helpdeskComments.filter((c) => c.ticketId === id);
+    return { ticket, comments };
+  }
+
+  public createHelpdeskTicket(input: {
+    category: HelpdeskTicket['category'];
+    priority: HelpdeskTicket['priority'];
+    title: string;
+    description: string;
+    location: string;
+    attachments?: HelpdeskAttachment[];
+  }): { success: boolean; ticket?: HelpdeskTicket; error?: string } {
+    // 1. Rate-limiting check: max 5 tickets per day
+    const todayStr = new Date().toISOString().split('T')[0];
+    const ticketsToday = this.helpdeskTickets.filter(
+      (t) => t.studentId === this.user.id && t.createdAt.startsWith(todayStr)
+    );
+    if (ticketsToday.length >= 5) {
+      return { success: false, error: 'Daily limit reached: Maximum 5 support tickets per day allowed.' };
+    }
+
+    // 2. Validate attachments: max 3 image attachments, max 5MB
+    const attachments = (input.attachments || []).slice(0, 3);
+    for (const att of attachments) {
+      if (att.size > 5 * 1024 * 1024) {
+        return { success: false, error: `File ${att.name} exceeds maximum 5MB size limit.` };
+      }
+      if (!att.type.startsWith('image/')) {
+        return { success: false, error: `File ${att.name} must be an image (PNG, JPG, WEBP).` };
+      }
+    }
+
+    const assignedDepartment =
+      input.category === 'Wi-Fi / Network'
+        ? 'Campus IT & Network Operations'
+        : input.category === 'Hostel Maintenance'
+        ? 'Hostel Estate & Facilities'
+        : input.category === 'Library'
+        ? 'Central Library Services'
+        : input.category === 'Transport'
+        ? 'Campus Transport Office'
+        : 'Student Affairs & Administration';
+
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const ticketNumber = `HD-2026-${randomNum}`;
+
+    const newTicket: HelpdeskTicket = {
+      id: `tkt-${Date.now()}`,
+      ticketNumber,
+      studentId: this.user.id,
+      category: input.category,
+      priority: input.priority,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      location: input.location.trim(),
+      status: 'Open',
+      assignedDepartment,
+      attachments,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.helpdeskTickets.unshift(newTicket);
+
+    // Initial acknowledgment comment
+    const welcomeComment: HelpdeskComment = {
+      id: `com-ack-${Date.now()}`,
+      ticketId: newTicket.id,
+      authorType: 'support',
+      authorName: `${assignedDepartment} Automated Dispatch`,
+      message: `Your ticket has been logged with Priority: ${input.priority}. It is being routed to the on-duty support team.`,
+      createdAt: new Date().toISOString(),
+    };
+    this.helpdeskComments.push(welcomeComment);
+
+    this.notifications.unshift({
+      id: `notif-hd-new-${Date.now()}`,
+      type: 'helpdesk_update',
+      title: `Ticket Logged: ${ticketNumber}`,
+      message: `Your ticket regarding "${input.title}" was registered.`,
+      date: 'Just now',
+      read: false,
+      link: '/helpdesk',
+    });
+
+    this.saveAll();
+    return { success: true, ticket: newTicket };
+  }
+
+  public addHelpdeskComment(ticketId: string, message: string): { success: boolean; comment?: HelpdeskComment; error?: string } {
+    const ticket = this.helpdeskTickets.find((t) => t.id === ticketId && t.studentId === this.user.id);
+    if (!ticket) return { success: false, error: 'Ticket not found.' };
+
+    const newComment: HelpdeskComment = {
+      id: `com-usr-${Date.now()}`,
+      ticketId,
+      authorType: 'student',
+      authorName: this.user.name,
+      message: message.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    this.helpdeskComments.push(newComment);
+    ticket.updatedAt = new Date().toISOString();
+
+    // Trigger simulated support follow-up after 4s
+    setTimeout(() => {
+      const followUp: HelpdeskComment = {
+        id: `com-sup-${Date.now()}`,
+        ticketId,
+        authorType: 'support',
+        authorName: `${ticket.assignedDepartment} Support`,
+        message: `Thank you for the additional information. We have updated the work order notes accordingly.`,
+        createdAt: new Date().toISOString(),
+      };
+      this.helpdeskComments.push(followUp);
+      this.saveAll();
+    }, 4000);
+
+    this.saveAll();
+    return { success: true, comment: newComment };
+  }
+
+  public updateHelpdeskTicket(
+    ticketId: string,
+    action: 'reopen' | 'close',
+    rating?: number
+  ): { success: boolean; error?: string } {
+    const ticket = this.helpdeskTickets.find((t) => t.id === ticketId && t.studentId === this.user.id);
+    if (!ticket) return { success: false, error: 'Ticket not found.' };
+
+    if (action === 'reopen') {
+      // Reopen within 7 days rule
+      const resolvedAt = new Date(ticket.updatedAt);
+      const daysSinceResolved = (Date.now() - resolvedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceResolved > 7) {
+        return { success: false, error: 'Tickets resolved more than 7 days ago cannot be reopened. Please open a new ticket.' };
+      }
+      ticket.status = 'In progress';
+      ticket.updatedAt = new Date().toISOString();
+      this.helpdeskComments.push({
+        id: `com-reopen-${Date.now()}`,
+        ticketId,
+        authorType: 'student',
+        authorName: this.user.name,
+        message: 'Reopened this ticket for further follow-up.',
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      ticket.status = 'Closed';
+      if (rating) ticket.rating = rating;
+      ticket.updatedAt = new Date().toISOString();
+      this.helpdeskComments.push({
+        id: `com-closed-${Date.now()}`,
+        ticketId,
+        authorType: 'student',
+        authorName: this.user.name,
+        message: `Student confirmed closure. Satisfaction rating: ${rating || 5}/5.`,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    this.saveAll();
+    return { success: true };
+  }
+
   // --- Badges & Streaks ---
   public getBadges(): Badge[] {
     return this.badges;
@@ -1186,23 +1683,98 @@ class StudentPortalDB {
     const streak = this.getStreak();
     const badges = this.badges.filter((b) => b.unlocked);
 
-    // Rule-based urgency scoring:
-    // 1) Low attendance (<75%)
-    // 2) Assignment due within 48h
-    // 3) Exam within 7 days
-    const atRiskCount = urgentAttendance.length;
+    // Timetable & class changes for today
+    const todaySlots = this.getTodayTimetable();
+    const changedSlots = todaySlots.filter((s) => s.change);
 
-    let assistantSentence = 'All systems nominal. You have 2 classes scheduled today.';
-    if (atRiskCount > 0) {
+    // Feedback forms status
+    const feedbackForms = this.getFeedbackForms();
+    const pendingFeedbackForms = feedbackForms.filter((f) => f.status === 'pending');
+
+    // Helpdesk tickets status
+    const helpdeskTickets = this.getHelpdeskTickets();
+    const openHelpdeskTickets = helpdeskTickets.filter((t) => t.status !== 'Closed');
+
+    // Fees status
+    const feeSummary = this.getFeeStatusSummary(this.user.semester);
+    const feeDueSoon = feeSummary.status === 'Due soon' || feeSummary.status === 'Overdue';
+
+    // Dashboard Urgency Order (Single highest urgent item for hero card):
+    // 1) Attendance below threshold (<75%)
+    // 2) Assignments due within 48h
+    // 3) Feedback forms closing within 3 days
+    // 4) Fees due within 7 days
+    // 5) Exams within 7 days
+    // 6) New circulars
+    let urgentHero: {
+      category: 'attendance' | 'assignment' | 'feedback' | 'fee' | 'exam' | 'circular';
+      title: string;
+      highlight: string;
+      description: string;
+      actionText: string;
+      actionPath: string;
+    };
+
+    if (urgentAttendance.length > 0) {
       const riskSub = urgentAttendance[0];
-      assistantSentence = `Attention: ${riskSub.subject.name} is at ${riskSub.currentPercent}%. You need ${riskSub.classesNeeded} more class to return to safety.`;
+      urgentHero = {
+        category: 'attendance',
+        title: 'ATTEND',
+        highlight: `${riskSub.classesNeeded} MORE CLASS`,
+        description: `You're at ${riskSub.currentPercent}%, just under the ${this.user.settings?.attendanceThreshold || 75}% line in ${riskSub.subject.name}. Next class restores safety.`,
+        actionText: 'Open calculator',
+        actionPath: '/attendance',
+      };
+    } else if (pendingAssignments.length > 0) {
+      const asg = pendingAssignments[0];
+      urgentHero = {
+        category: 'assignment',
+        title: 'SUBMIT',
+        highlight: asg.title,
+        description: `Due soon for ${asg.subjectCode}. Upload your submission to maintain continuous internal marks.`,
+        actionText: 'View assignments',
+        actionPath: '/dashboard',
+      };
+    } else if (pendingFeedbackForms.length > 0) {
+      urgentHero = {
+        category: 'feedback',
+        title: 'COMPLETE',
+        highlight: `${pendingFeedbackForms.length} COURSE FEEDBACK FORMS`,
+        description: `Mandatory student evaluation window closes in 48 hours. Required before exam hall tickets are generated.`,
+        actionText: 'Submit feedback',
+        actionPath: '/feedback',
+      };
+    } else if (feeSummary.balanceDue > 0 && feeDueSoon) {
+      urgentHero = {
+        category: 'fee',
+        title: 'SETTLE',
+        highlight: `₹${feeSummary.balanceDue.toLocaleString()} SEMESTER 6 FEE`,
+        description: `Balance payment due on ${feeSummary.dueDate}. Settle on college portal to ensure no-dues clearance.`,
+        actionText: 'View fee details',
+        actionPath: '/fees',
+      };
+    } else if (upcomingExams.length > 0) {
+      urgentHero = {
+        category: 'exam',
+        title: 'REVISE',
+        highlight: `${upcomingExams[0].subjectCode} EXAM`,
+        description: `${upcomingExams[0].subjectName} theory exam scheduled on ${upcomingExams[0].examDate}.`,
+        actionText: 'Study planner',
+        actionPath: '/exams',
+      };
     } else {
-      assistantSentence = '2 classes today, DBMS quiz tomorrow, you can safely skip 1 class.';
+      urgentHero = {
+        category: 'circular',
+        title: 'CHECK',
+        highlight: 'LATEST CIRCULARS',
+        description: 'New official campus notifications and announcements posted by registrar.',
+        actionText: 'Read circulars',
+        actionPath: '/circulars',
+      };
     }
 
     return {
-      assistantSentence,
-      atRiskCount,
+      urgentHero,
       summary,
       urgentAttendance,
       pendingAssignments,
@@ -1210,6 +1782,12 @@ class StudentPortalDB {
       latestCirculars,
       streak,
       unlockedBadges: badges,
+      todaySlots,
+      changedSlots,
+      pendingFeedbackCount: pendingFeedbackForms.length,
+      openHelpdeskCount: openHelpdeskTickets.length,
+      feeSummary,
+      feeDueSoon,
     };
   }
 }

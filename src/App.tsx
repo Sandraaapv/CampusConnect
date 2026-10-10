@@ -30,6 +30,14 @@ import { SettingsPage } from './pages/portal/SettingsPage';
 import { OnboardingPage } from './pages/portal/OnboardingPage';
 import { NotFoundPage } from './pages/portal/NotFoundPage';
 
+// Section 1-6 New Student Portal Pages
+import { TimetablePage } from './pages/portal/TimetablePage';
+import { FeesPage } from './pages/portal/FeesPage';
+import { FacultyPage } from './pages/portal/FacultyPage';
+import { FeedbackPage } from './pages/portal/FeedbackPage';
+import { HelpdeskPage } from './pages/portal/HelpdeskPage';
+import { VerifyReceiptPage } from './pages/portal/VerifyReceiptPage';
+
 function LandingPage() {
   const progressBarRef = useRef<HTMLDivElement | null>(null);
 
@@ -166,11 +174,55 @@ export function App() {
     return <VerifyTokenPage />;
   }
 
+  if (currentPath.startsWith('/receipts/verify/')) {
+    return <VerifyReceiptPage />;
+  }
+
   // Student Portal Routes (Protected)
   if (currentPath === '/dashboard' || currentPath === '/dashboard/student') {
     return (
       <ProtectedRoute>
         <DashboardPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/timetable') {
+    return (
+      <ProtectedRoute>
+        <TimetablePage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/fees') {
+    return (
+      <ProtectedRoute>
+        <FeesPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/faculty') {
+    return (
+      <ProtectedRoute>
+        <FacultyPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/feedback') {
+    return (
+      <ProtectedRoute>
+        <FeedbackPage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/helpdesk') {
+    return (
+      <ProtectedRoute>
+        <HelpdeskPage />
       </ProtectedRoute>
     );
   }
