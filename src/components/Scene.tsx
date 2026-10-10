@@ -71,6 +71,9 @@ export const Scene: React.FC<SceneProps> = ({ scene, index }) => {
         className="scene-container absolute inset-0 w-full h-full select-none pointer-events-none"
         style={{
           paddingTop: 'calc(var(--header-h) + 2vh)',
+          opacity: index === 0 ? 1 : 0,
+          visibility: index === 0 ? 'visible' : 'hidden',
+          zIndex: index === 0 ? 10 : 1,
         }}
       >
         {/* Content Centered at Top */}
@@ -137,6 +140,12 @@ export const Scene: React.FC<SceneProps> = ({ scene, index }) => {
       id={`scene-${scene.id}`}
       aria-label={scene.heading}
       className="scene-container absolute inset-0 w-full h-full select-none pointer-events-none"
+      style={{
+        opacity: index === 0 ? 1 : 0,
+        visibility: index === 0 ? 'visible' : 'hidden',
+        pointerEvents: index === 0 ? 'auto' : 'none',
+        zIndex: index === 0 ? 10 : 1,
+      }}
     >
       {/* DESKTOP LAYOUT (>= 900px) */}
       <div className="hidden lg:block w-full h-full relative">

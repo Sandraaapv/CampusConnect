@@ -294,3 +294,16 @@
 .perspective-container {
   perspective: 1200px;
 }
+
+/* Prevent FOUC: Hide all scene containers except the first scene before GSAP initializes */
+.scene-container:not(:first-child) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.scene-container:first-child {
+  opacity: 1;
+  visibility: visible;
+}
+
