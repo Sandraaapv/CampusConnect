@@ -27,11 +27,11 @@
     --app-bg: #000000;
     --app-surface: #0f0f0f;
     --app-surface-subtle: #171717;
-    --app-text: #ffffff;
+    --app-text: #f5f4f2;
     --app-text-muted: #a3a3a3;
     --app-border: rgba(255, 255, 255, 0.12);
     --app-border-strong: rgba(255, 255, 255, 0.24);
-    --btn-primary-bg: #ffffff;
+    --btn-primary-bg: #f5f4f2;
     --btn-primary-text: #000000;
     --btn-primary-hover: #e5e5e5;
     --card-shadow: none;
