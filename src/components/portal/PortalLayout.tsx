@@ -20,9 +20,11 @@ import {
   Menu,
   X,
   MoreHorizontal,
+  LogOut,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../services/db';
+import { authService } from '../../services/auth';
 import { navigate } from '../../utils/navigation';
 
 interface PortalLayoutProps {
@@ -49,6 +51,11 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
   const user = db.getUser();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileMoreSheetOpen, setMobileMoreSheetOpen] = useState(false);
+
+  const handleLogout = () => {
+    authService.logout();
+    navigate('/');
+  };
 
   // Dynamic live badges from database
   const pendingFeedbackCount = useMemo(() => {
@@ -287,6 +294,15 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
               <span>Settings</span>
             </button>
 
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-full font-bold text-xs transition cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Log Out</span>
+            </button>
+
             {/* Segmented Control: Light / Dark */}
             <div
               role="radiogroup"
@@ -383,6 +399,15 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
               </button>
               <button
                 type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-full border border-[var(--app-border)] text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                aria-label="Log out"
+                title="Log Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="p-2 rounded-lg border border-[var(--app-border)] text-[var(--app-text)]"
                 aria-label="Open navigation menu"
@@ -425,7 +450,7 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
                   ))}
                 </div>
               ))}
-              <div className="pt-2 border-t border-[var(--app-border)]">
+              <div className="pt-2 border-t border-[var(--app-border)] space-y-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -436,6 +461,17 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
                 >
                   <Settings className="w-4 h-4" />
                   <span>Settings</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-full font-bold text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Log Out</span>
                 </button>
               </div>
             </div>
@@ -604,6 +640,18 @@ export const PortalLayout: React.FC<PortalLayoutProps> = ({ currentPath, childre
               >
                 <Settings className="w-4 h-4" />
                 <span>Settings</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMoreSheetOpen(false);
+                  handleLogout();
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-500/10"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
               </button>
 
               <button
