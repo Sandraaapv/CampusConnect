@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, KeyRound, MailCheck, AlertCircle, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, UserCheck } from 'lucide-react';
+import { Search, KeyRound, MailCheck, AlertCircle, ArrowRight, ArrowLeft, ShieldCheck, UserCheck } from 'lucide-react';
 import { AuthLayout, type MascotPose } from '../components/auth/AuthLayout';
 import { PasswordStrengthMeter } from '../components/auth/PasswordStrengthMeter';
 import { OtpInput } from '../components/auth/OtpInput';

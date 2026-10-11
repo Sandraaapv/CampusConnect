@@ -51,6 +51,16 @@ export interface StudentRecordDetails {
   semester: number;
 }
 
+export interface RegisterInput {
+  name: string;
+  email: string;
+  registerNumber: string;
+  department: string;
+  semester: number;
+  password: string;
+  role?: string;
+}
+
 export interface LoginInput {
   identifier: string; // register number or college ID
   password: string;
@@ -189,6 +199,14 @@ export const authService = {
       return this.generateLocalAudioUrl(localItem.answer);
     }
     return this.generateLocalAudioUrl('73924');
+  },
+
+  async fetchCaptcha(): Promise<CaptchaData> {
+    return this.getCaptcha();
+  },
+
+  async getCaptchaAudioUrl(captchaId: string): Promise<string> {
+    return this.getCaptchaAudio(captchaId);
   },
 
   generateLocalCaptcha(): CaptchaData {
@@ -656,6 +674,127 @@ export const authService = {
     };
   },
 
+  async register(input: RegisterInput): Promise<{ success: boolean; message: string; user?: User }> {
+    const cleanReg = input.registerNumber.trim().toUpperCase();
+    const cleanEmail = input.email.trim().toLowerCase();
+
+    const whitelist = db.getStudentRecordWhitelist();
+    const isEnrolled = whitelist.find(
+      (r) =>
+        r.registerNumber.toUpperCase() === cleanReg &&
+        r.email.toLowerCase() === cleanEmail
+    );
+
+    const newUser: User = {
+      ...db.getUser(),
+      name: input.name.trim(),
+      email: cleanEmail,
+      registerNumber: cleanReg,
+      department: input.department.trim() || (isEnrolled?.department ?? 'Computer Science & Engineering'),
+      semester: Number(input.semester) || (isEnrolled?.semester ?? 6),
+      role: 'student',
+    };
+
+    LOCAL_REGISTERED_USERS[cleanReg.toLowerCase()] = {
+      user: newUser,
+      password: input.password,
+    };
+    db.setUser(newUser);
+
+    return {
+      success: true,
+      message: 'Student account registered successfully.',
+      user: newUser,
+    };
+  },
+
+  async verifyEmail(identifier: string, otp: string): Promise<{ success: boolean; message?: string; accessToken?: string; user?: User }> {
+    const cleanId = identifier.trim().toLowerCase();
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ identifier: cleanId, otp }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accessToken) {
+          inMemoryAccessToken = data.accessToken;
+        }
+        if (data.user) {
+          currentUserProfile = data.user;
+          try {
+            sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(data.user));
+          } catch {}
+          db.setUser({
+            ...db.getUser(),
+            ...data.user,
+          });
+        }
+        authChannel?.postMessage({ type: 'LOGIN' });
+        return data;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Verification failed.');
+      }
+    } catch (e: any) {
+      if (e.message?.includes('Verification') || e.message?.includes('code') || e.message?.includes('expired') || e.message?.includes('attempts')) {
+        throw e;
+      }
+      const stored = LOCAL_OTPS[cleanId] || LOCAL_OTPS[cleanId.toUpperCase()];
+      if (stored && (stored.used || stored.expiresAt < Date.now())) {
+        throw new Error('Verification code has expired. Please request a new code.');
+      }
+      if (stored) {
+        stored.attempts = (stored.attempts || 0) + 1;
+        if (stored.attempts > 5) {
+          stored.used = true;
+          throw new Error('Maximum verification attempts exceeded. Please request a new code.');
+        }
+        if (stored.code !== otp.trim()) {
+          throw new Error(`Incorrect verification code. ${Math.max(0, 5 - stored.attempts)} attempts remaining.`);
+        }
+        stored.used = true;
+      } else if (otp.trim() !== '123456') {
+        throw new Error('Incorrect verification code. Please check your email or enter 123456 in demo mode.');
+      }
+
+      const token = `local_jwt_token_${Date.now()}`;
+      inMemoryAccessToken = token;
+      const user = db.getUser();
+      currentUserProfile = user;
+      try {
+        sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(user));
+      } catch {}
+      authChannel?.postMessage({ type: 'LOGIN' });
+      return { success: true, message: 'Email verified successfully!', accessToken: token, user };
+    }
+  },
+
+  async resendOtp(identifier: string, _type?: string): Promise<{ message: string }> {
+    const cleanId = identifier.trim().toLowerCase();
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId }),
+      });
+      if (res.ok) return await res.json();
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to resend code.');
+    } catch (e: any) {
+      if (e.message?.includes('wait') || e.message?.includes('limit')) throw e;
+      LOCAL_OTPS[cleanId] = {
+        code: '123456',
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        attempts: 0,
+        used: false,
+      };
+      return { message: 'A new verification code has been sent to your email.' };
+    }
+  },
+
   // --- Forgot Password (No Captcha) ---
   async forgotPassword(identifier: string): Promise<{ message: string }> {
     const cleanId = identifier.trim().toLowerCase();
@@ -757,6 +896,10 @@ export const authService = {
     ];
   },
 
+  async getSessions(): Promise<SessionItem[]> {
+    return this.fetchSessions();
+  },
+
   async revokeSession(sessionId: string): Promise<void> {
     try {
       await fetch(`${BACKEND_URL}/auth/sessions/${sessionId}`, {
@@ -779,6 +922,19 @@ export const authService = {
     } catch {
       // ignore
     }
+  },
+
+  async revokeAllSessions(): Promise<void> {
+    try {
+      await fetch(`${BACKEND_URL}/auth/sessions`, {
+        method: 'DELETE',
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {},
+        credentials: 'include',
+      });
+    } catch {
+      // ignore
+    }
+    await this.logout();
   },
 
   async fetchLoginEvents(): Promise<LoginEventItem[]> {

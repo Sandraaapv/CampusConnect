@@ -25,7 +25,7 @@ export const CaptchaBox: React.FC<CaptchaBoxProps> = ({
   const loadCaptcha = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await authService.fetchCaptcha();
+      const data = await authService.getCaptcha();
       setCurrentId(data.captchaId);
       setImageBase64(data.imageBase64);
       setAnswer('');
@@ -56,7 +56,7 @@ export const CaptchaBox: React.FC<CaptchaBoxProps> = ({
     if (playingAudio) return;
     try {
       setPlayingAudio(true);
-      const audioUrl = await authService.getCaptchaAudioUrl(currentId);
+      const audioUrl = await authService.getCaptchaAudio(currentId);
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
         audioRef.current.play();
