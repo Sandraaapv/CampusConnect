@@ -24,3 +24,5 @@ test_*.mjs
 *.njsproj
 *.sln
 *.sw?
+.tools/
+backend/target/

@@ -105,6 +105,7 @@ export interface User {
   semester: number;
   passwordHash: string;
   avatarUrl?: string;
+  role?: string;
   settings: StudentSettings;
   createdAt: string;
 }
@@ -305,35 +306,35 @@ const DEFAULT_SETTINGS: StudentSettings = {
 const SEED_STUDENT_RECORDS: StudentRecord[] = [
   {
     registerNumber: '21CS042',
-    email: 'student.demo@college.edu',
-    name: 'Aarav Sharma',
+    email: 'student.demo@campus.test',
+    name: 'Arjun Verma',
     department: 'Computer Science & Engineering',
     semester: 6,
   },
   {
-    registerNumber: '21CS077',
-    email: 'rohit.sharma@college.edu',
-    name: 'Rohit Sharma',
-    department: 'Computer Science & Engineering',
-    semester: 6,
-  },
-  {
-    registerNumber: '21CS105',
-    email: 'ananya.sen@college.edu',
+    registerNumber: '21CSC105',
+    email: 'ananya.sen@campus.test',
     name: 'Ananya Sen',
     department: 'Computer Science & Engineering',
     semester: 6,
   },
   {
+    registerNumber: '21CS077',
+    email: 'rohit.sharma@campus.test',
+    name: 'Rohit Sharma',
+    department: 'Computer Science & Engineering',
+    semester: 6,
+  },
+  {
     registerNumber: '21EC034',
-    email: 'vikram.mehta@college.edu',
+    email: 'vikram.mehta@campus.test',
     name: 'Vikram Mehta',
     department: 'Electronics & Communication',
     semester: 6,
   },
   {
     registerNumber: '21ME019',
-    email: 'sneha.patel@college.edu',
+    email: 'sneha.patel@campus.test',
     name: 'Sneha Patel',
     department: 'Mechanical Engineering',
     semester: 6,
@@ -917,6 +918,28 @@ class StudentPortalDB {
 
   // --- User / Profile / Settings ---
   public getUser(): User {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = sessionStorage.getItem('campusconnect_auth_user_session');
+        if (cached) {
+          const authUser = JSON.parse(cached);
+          if (authUser && authUser.name && (this.user.name !== authUser.name || this.user.registerNumber !== authUser.registerNumber)) {
+            this.user = {
+              ...this.user,
+              ...authUser,
+            };
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return this.user;
+  }
+
+  public setUser(user: User): User {
+    this.user = user;
+    this.saveAll();
     return this.user;
   }
 

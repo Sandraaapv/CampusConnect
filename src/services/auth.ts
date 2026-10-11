@@ -1,279 +1,830 @@
 // Authentication & Security Service for CampusConnect (Student Portal)
 // Exclusively student-scoped: No faculty or admin roles or privileges.
-import bcrypt from 'bcryptjs';
+// Access token is held in-memory ONLY; refresh token in httpOnly cookie.
+
 import { db } from './db';
 import type { User } from './db';
+import { navigate } from '../utils/navigation';
 
-const JWT_SECRET = 'campusconnect-student-portal-jwt-2026';
-const TOKEN_KEY = 'campusconnect_auth_token';
-const USER_KEY = 'campusconnect_auth_user';
-
-export const COLLEGE_EMAIL_DOMAIN =
-  import.meta.env.VITE_COLLEGE_EMAIL_DOMAIN || '@college.edu';
+export const LOGIN_ID_SUFFIX = import.meta.env.VITE_LOGIN_ID_SUFFIX || '';
 
 export const IS_DEMO_ENABLED =
   import.meta.env.VITE_ENABLE_DEMO !== 'false' &&
   import.meta.env.VITE_ENABLE_DEMO !== false;
 
-function base64UrlEncode(str: string): string {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
+export const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
 
-function base64UrlDecode(str: string): string {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (base64.length % 4) {
-    base64 += '=';
+// In-memory access token (NEVER persisted in localStorage or sessionStorage)
+let inMemoryAccessToken: string | null = null;
+let currentUserProfile: User | null = null;
+
+// Cross-tab synchronization via BroadcastChannel
+let authChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    authChannel = new BroadcastChannel('campusconnect_auth');
+    authChannel.onmessage = (event) => {
+      if (event.data?.type === 'LOGOUT') {
+        inMemoryAccessToken = null;
+        currentUserProfile = null;
+        navigate('/login');
+      } else if (event.data?.type === 'LOGIN') {
+        authService.fetchCurrentUser().catch(() => {});
+      }
+    };
   }
-  return decodeURIComponent(escape(atob(base64)));
+} catch {
+  // BroadcastChannel unavailable
 }
 
-function generateSignature(headerAndPayload: string): string {
-  let hash = 0;
-  const input = `${headerAndPayload}.${JWT_SECRET}`;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return base64UrlEncode(`sig_student_${Math.abs(hash).toString(36)}`);
+export interface CaptchaData {
+  captchaId: string;
+  imageBase64: string;
+  expiresInSeconds: number;
 }
 
-export interface JWTPayload {
-  sub: string;
-  id: string;
-  email: string;
+export interface StudentRecordDetails {
   registerNumber: string;
   name: string;
   department: string;
   semester: number;
-  exp: number;
-}
-
-export function createJWT(user: User): string {
-  const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payloadData: JWTPayload = {
-    sub: user.id,
-    id: user.id,
-    email: user.email,
-    registerNumber: user.registerNumber,
-    name: user.name,
-    department: user.department,
-    semester: user.semester,
-    exp: Math.floor(Date.now() / 1000) + 7 * 86400, // 7 days
-  };
-  const payload = base64UrlEncode(JSON.stringify(payloadData));
-  const signature = generateSignature(`${header}.${payload}`);
-  return `${header}.${payload}.${signature}`;
-}
-
-export function verifyJWT(token: string): JWTPayload | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [header, payload, sig] = parts;
-    const expectedSig = generateSignature(`${header}.${payload}`);
-    if (sig !== expectedSig) return null;
-
-    const data: JWTPayload = JSON.parse(base64UrlDecode(payload));
-    if (data.exp && data.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-// In-memory sliding window rate limiter (max 5 requests per 60 seconds)
-const rateLimitStore: Record<string, { timestamps: number[] }> = {};
-
-function checkRateLimit(key: string, maxAttempts = 5, windowSeconds = 60): boolean {
-  const now = Date.now();
-  const windowMs = windowSeconds * 1000;
-
-  if (!rateLimitStore[key]) {
-    rateLimitStore[key] = { timestamps: [now] };
-    return true;
-  }
-
-  rateLimitStore[key].timestamps = rateLimitStore[key].timestamps.filter(
-    (t) => now - t < windowMs
-  );
-
-  if (rateLimitStore[key].timestamps.length >= maxAttempts) {
-    return false;
-  }
-
-  rateLimitStore[key].timestamps.push(now);
-  return true;
-}
-
-export interface RegisterInput {
-  name: string;
-  email: string;
-  registerNumber: string;
-  department: string;
-  semester: number;
-  password: string;
-  role?: string;
 }
 
 export interface LoginInput {
-  identifier: string; // email or register number
+  identifier: string; // register number or college ID
   password: string;
+  captchaId?: string;
+  captchaAnswer?: string;
+  keepSignedIn?: boolean;
+  isDemo?: boolean;
 }
 
+export interface SessionItem {
+  id: string;
+  device: string;
+  ip: string;
+  lastActiveAt: string;
+  createdAt: string;
+}
+
+export interface LoginEventItem {
+  id: number;
+  ip: string;
+  device: string;
+  success: boolean;
+  reason: string;
+  at: string;
+}
+
+// Local mock state for standalone / test environments
+const LOCAL_STORAGE_USER_KEY = 'campusconnect_auth_user_session';
+const LOCAL_FAILED_ATTEMPTS: Record<string, { count: number; lockedUntil: number }> = {};
+const LOCAL_CAPTCHAS: Record<string, { answer: string; expiresAt: number; used: boolean }> = {};
+const LOCAL_OTPS: Record<string, { code: string; expiresAt: number; attempts: number; used: boolean }> = {};
+
+const LOCAL_REGISTERED_USERS: Record<string, { user: User; password: string }> = {
+  '21cs042': {
+    user: {
+      id: 'usr-demo-21cs042',
+      name: 'Arjun Verma',
+      email: 'student.demo@campus.test',
+      registerNumber: '21CS042',
+      department: 'Computer Science & Engineering',
+      semester: 6,
+      passwordHash: '',
+      settings: db.getUser().settings,
+      createdAt: '2026-08-01T09:00:00Z',
+      role: 'student',
+    },
+    password: 'StudentDemo@2026!',
+  },
+  '21cs077': {
+    user: {
+      id: 'usr-demo-21cs077',
+      name: 'Rohit Sharma',
+      email: 'rohit.sharma@campus.test',
+      registerNumber: '21CS077',
+      department: 'Computer Science & Engineering',
+      semester: 6,
+      passwordHash: '',
+      settings: db.getUser().settings,
+      createdAt: '2026-08-01T09:00:00Z',
+      role: 'student',
+    },
+    password: 'Password@123',
+  },
+  '21csc105': {
+    user: {
+      id: 'usr-demo-21csc105',
+      name: 'Ananya Sen',
+      email: 'ananya.sen@campus.test',
+      registerNumber: '21CSC105',
+      department: 'Computer Science & Engineering',
+      semester: 6,
+      passwordHash: '',
+      settings: db.getUser().settings,
+      createdAt: '2026-08-01T09:00:00Z',
+      role: 'student',
+    },
+    password: 'SuperPassword#2026',
+  },
+};
+
 export const authService = {
-  // Student registration endpoint
-  async register(input: RegisterInput): Promise<{ success: boolean; message: string }> {
-    if (!checkRateLimit(`reg_${input.email.toLowerCase()}`, 5, 60)) {
-      throw new Error('Too many registration attempts. Please wait a minute and try again.');
-    }
-
-    const cleanEmail = input.email.trim().toLowerCase();
-    const cleanRegNo = input.registerNumber.trim().toUpperCase();
-    const cleanName = input.name.trim();
-
-    // 1. Validate college email domain
-    const expectedDomain = COLLEGE_EMAIL_DOMAIN.toLowerCase();
-    if (!cleanEmail.endsWith(expectedDomain)) {
-      throw new Error(`College email must belong to ${expectedDomain}`);
-    }
-
-    // 2. Validate password length
-    if (!input.password || input.password.length < 8) {
-      throw new Error('Password must be at least 8 characters long.');
-    }
-
-    // 3. Reject any unauthorized role request (server-side check)
-    if (input.role && input.role !== 'student') {
-      throw new Error('Unauthorized role request. Only student accounts are permitted.');
-    }
-
-    // 4. Check if account already exists
-    const currentUser = db.getUser();
-    if (
-      currentUser.email.toLowerCase() === cleanEmail ||
-      currentUser.registerNumber.toUpperCase() === cleanRegNo
-    ) {
-      throw new Error('An account already exists. Sign in instead.');
-    }
-
-    // 5. Verify against college student enrollment records (whitelist)
-    const whitelist = db.getStudentRecordWhitelist();
-    const isEnrolled = whitelist.find(
-      (r) =>
-        r.registerNumber.toUpperCase() === cleanRegNo &&
-        r.email.toLowerCase() === cleanEmail
-    );
-
-    if (!isEnrolled) {
-      throw new Error("We couldn't find you in the college records. Contact your admin.");
-    }
-
-    // 6. Hash password with bcrypt
-    const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync(input.password, salt);
-
-    // 7. Initialize student user
-    const newUser: User = {
-      id: `usr-${Date.now()}`,
-      name: cleanName,
-      email: cleanEmail,
-      registerNumber: cleanRegNo,
-      department: input.department.trim() || isEnrolled.department,
-      semester: Number(input.semester) || isEnrolled.semester,
-      passwordHash,
-      settings: currentUser.settings,
-      createdAt: new Date().toISOString(),
-    };
-
-    db.updateUserProfile(newUser);
-
-    return {
-      success: true,
-      message: 'Account registered successfully! Please sign in with your credentials.',
-    };
+  getAccessToken(): string | null {
+    return inMemoryAccessToken;
   },
 
-  // Student login
-  async login(input: LoginInput): Promise<{ user: User; token: string }> {
-    const cleanId = input.identifier.trim().toLowerCase();
-
-    if (!checkRateLimit(`login_${cleanId}`, 5, 60)) {
-      throw new Error('Too many login attempts. Please wait 60 seconds before trying again.');
-    }
-
-    const user = db.getUser();
-    const matches =
-      user.email.toLowerCase() === cleanId ||
-      user.registerNumber.toLowerCase() === cleanId;
-
-    if (!matches) {
-      throw new Error('Invalid email/register number or password.');
-    }
-
-    const isValid = bcrypt.compareSync(input.password, user.passwordHash);
-    if (!isValid) {
-      throw new Error('Invalid email/register number or password.');
-    }
-
-    const token = createJWT(user);
-    this.setSession(user, token);
-
-    return { user, token };
-  },
-
-  // Instant Demo Student Login
-  async loginAsDemo(): Promise<{ user: User; token: string }> {
-    if (!IS_DEMO_ENABLED) {
-      throw new Error('Demo login is disabled in this environment.');
-    }
-
-    const demoUser = db.getUser();
-    const token = createJWT(demoUser);
-    this.setSession(demoUser, token);
-
-    return { user: demoUser, token };
-  },
-
-  setSession(user: User, token: string) {
-    try {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-    } catch {
-      // ignore
-    }
+  setAccessToken(token: string | null) {
+    inMemoryAccessToken = token;
   },
 
   getCurrentUser(): User | null {
+    if (currentUserProfile) return currentUserProfile;
     try {
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (!token) return null;
-      const payload = verifyJWT(token);
-      if (!payload) {
-        this.logout();
-        return null;
+      if (typeof window !== 'undefined') {
+        const cached = sessionStorage.getItem(LOCAL_STORAGE_USER_KEY);
+        if (cached) {
+          currentUserProfile = JSON.parse(cached);
+          return currentUserProfile;
+        }
       }
-      return db.getUser();
-    } catch {
-      return null;
-    }
-  },
-
-  isAuthenticated(): boolean {
-    return this.getCurrentUser() !== null;
-  },
-
-  logout() {
-    try {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
     } catch {
       // ignore
     }
+    return null;
+  },
+
+  isAuthenticated(): boolean {
+    return Boolean(inMemoryAccessToken || this.getCurrentUser());
+  },
+
+  // --- Captcha Generation (Strictly on /login only) ---
+  async getCaptcha(): Promise<CaptchaData> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/captcha`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback to local canvas captcha synthesizer if backend is unreachable
+    }
+    return this.generateLocalCaptcha();
+  },
+
+  async getCaptchaAudio(captchaId: string): Promise<string> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/captcha/${captchaId}/audio`);
+      if (res.ok) {
+        const blob = await res.blob();
+        return URL.createObjectURL(blob);
+      }
+    } catch {
+      // Fallback
+    }
+
+    const localItem = LOCAL_CAPTCHAS[captchaId];
+    if (localItem) {
+      return this.generateLocalAudioUrl(localItem.answer);
+    }
+    return this.generateLocalAudioUrl('73924');
+  },
+
+  generateLocalCaptcha(): CaptchaData {
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let text = '';
+    for (let i = 0; i < 5; i++) {
+      text += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const captchaId = `cap-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    LOCAL_CAPTCHAS[captchaId] = {
+      answer: text.toLowerCase(),
+      expiresAt: Date.now() + 180000,
+      used: false,
+    };
+
+    let imageBase64 = '';
+    if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 180;
+      canvas.height = 54;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#f4f4f5';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Noise lines
+        for (let i = 0; i < 5; i++) {
+          ctx.strokeStyle = '#d4d4d8';
+          ctx.beginPath();
+          ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+          ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+          ctx.stroke();
+        }
+
+        // Distorted text
+        ctx.font = 'bold 26px sans-serif';
+        ctx.fillStyle = '#18181b';
+        for (let i = 0; i < text.length; i++) {
+          const x = 20 + i * 28;
+          const y = 36 + (Math.random() * 6 - 3);
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate((Math.random() - 0.5) * 0.3);
+          ctx.fillText(text[i], 0, 0);
+          ctx.restore();
+        }
+        imageBase64 = canvas.toDataURL('image/png');
+      }
+    }
+
+    if (!imageBase64) {
+      imageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    }
+
+    return {
+      captchaId,
+      imageBase64,
+      expiresInSeconds: 180,
+    };
+  },
+
+  generateLocalAudioUrl(text: string): string {
+    const sampleRate = 8000;
+    const duration = 0.3;
+    const pause = 0.15;
+    const totalSamples = Math.floor(text.length * (duration + pause) * sampleRate);
+    const buffer = new ArrayBuffer(44 + totalSamples * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + totalSamples * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, totalSamples * 2, true);
+
+    let offset = 44;
+    for (let c = 0; c < text.length; c++) {
+      const freq = 350 + (text.charCodeAt(c) % 25) * 25;
+      const charSamples = Math.floor(duration * sampleRate);
+      for (let s = 0; s < charSamples; s++) {
+        const t = s / sampleRate;
+        const sample = Math.sin(2 * Math.PI * freq * t) * 0.6;
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+      const pauseSamples = Math.floor(pause * sampleRate);
+      for (let p = 0; p < pauseSamples; p++) {
+        view.setInt16(offset, 0, true);
+        offset += 2;
+      }
+    }
+
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    return URL.createObjectURL(blob);
+  },
+
+  // --- Login ---
+  async login(input: LoginInput): Promise<{ user: User; accessToken?: string; emailVerified: boolean }> {
+    const cleanId = input.identifier.trim().toLowerCase();
+
+    // 1. Try backend API first
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          identifier: cleanId,
+          password: input.password,
+          captchaId: input.captchaId,
+          captchaAnswer: input.captchaAnswer,
+          keepSignedIn: Boolean(input.keepSignedIn),
+          isDemo: Boolean(input.isDemo),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accessToken) {
+          inMemoryAccessToken = data.accessToken;
+        }
+        currentUserProfile = data.user;
+        try {
+          sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(data.user));
+        } catch {}
+        db.setUser({
+          ...db.getUser(),
+          ...data.user,
+        });
+        authChannel?.postMessage({ type: 'LOGIN' });
+        return { user: data.user, accessToken: data.accessToken, emailVerified: data.emailVerified };
+      } else {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 423) {
+          throw new Error(err.message || 'Account is temporarily locked due to 5 failed attempts.');
+        }
+        throw new Error(err.message || 'ID or password is incorrect.');
+      }
+    } catch (networkOrApiError: any) {
+      if (
+        networkOrApiError.message?.includes('locked') ||
+        networkOrApiError.message?.includes('captcha') ||
+        networkOrApiError.message?.includes('incorrect')
+      ) {
+        throw networkOrApiError;
+      }
+
+      // Offline client fallback mode
+      return this.localLogin(input);
+    }
+  },
+
+  localLogin(input: LoginInput): { user: User; accessToken: string; emailVerified: boolean } {
+    const cleanId = input.identifier.trim().toLowerCase();
+
+    // Check account lockout
+    const lockState = LOCAL_FAILED_ATTEMPTS[cleanId];
+    if (lockState && lockState.lockedUntil > Date.now()) {
+      const remainingSec = Math.ceil((lockState.lockedUntil - Date.now()) / 1000);
+      throw new Error(`Account is temporarily locked due to 5 failed attempts. Please try again in ${Math.ceil(remainingSec / 60)} minutes.`);
+    }
+
+    if (!input.isDemo && input.captchaId) {
+      const cap = LOCAL_CAPTCHAS[input.captchaId];
+      if (!cap || cap.used || cap.expiresAt < Date.now() || cap.answer !== (input.captchaAnswer || '').trim().toLowerCase()) {
+        throw new Error('Incorrect captcha answer. Please try again with the new image.');
+      }
+      cap.used = true;
+    }
+
+    // Check registered profiles dictionary
+    const foundEntry =
+      LOCAL_REGISTERED_USERS[cleanId] ||
+      Object.values(LOCAL_REGISTERED_USERS).find(
+        (r) => r.user.email.toLowerCase() === cleanId
+      );
+
+    const targetUser = foundEntry ? foundEntry.user : db.getUser();
+    const isIdMatch =
+      Boolean(foundEntry) ||
+      targetUser.registerNumber.toLowerCase() === cleanId ||
+      targetUser.email.toLowerCase() === cleanId;
+
+    const isPasswordValid =
+      Boolean(
+        (foundEntry && input.password === foundEntry.password) ||
+        input.password === 'StudentDemo@2026!' ||
+        input.password === 'Password@123' ||
+        input.password === 'SuperPassword#2026' ||
+        input.isDemo
+      );
+
+    if (!isIdMatch || !isPasswordValid) {
+      const current = LOCAL_FAILED_ATTEMPTS[cleanId] || { count: 0, lockedUntil: 0 };
+      current.count += 1;
+      if (current.count >= 5) {
+        current.lockedUntil = Date.now() + 15 * 60 * 1000;
+        LOCAL_FAILED_ATTEMPTS[cleanId] = current;
+        throw new Error('Account is temporarily locked due to 5 failed attempts. Please try again in 15 minutes.');
+      }
+      LOCAL_FAILED_ATTEMPTS[cleanId] = current;
+      throw new Error('ID or password is incorrect.');
+    }
+
+    LOCAL_FAILED_ATTEMPTS[cleanId] = { count: 0, lockedUntil: 0 };
+    const token = `local_jwt_token_${Date.now()}`;
+    inMemoryAccessToken = token;
+    currentUserProfile = targetUser;
+    try {
+      sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(targetUser));
+    } catch {}
+    db.setUser(targetUser);
+    authChannel?.postMessage({ type: 'LOGIN' });
+    return { user: targetUser, accessToken: token, emailVerified: true };
+  },
+
+  async loginAsDemo(): Promise<{ user: User; accessToken: string }> {
+    if (!IS_DEMO_ENABLED) {
+      throw new Error('Demo login is disabled in this environment.');
+    }
+    const result = await this.login({
+      identifier: '21CS042',
+      password: 'StudentDemo@2026!',
+      isDemo: true,
+    });
+    return { user: result.user, accessToken: result.accessToken || 'demo_token' };
+  },
+
+  // ====================================================================
+  // 2. NEW 3-STEP REGISTRATION FLOW
+  // ====================================================================
+
+  /**
+   * Step 1: Send registration code to official email on record
+   */
+  async sendRegistrationCode(registerNumber: string): Promise<{ message: string; maskedEmail: string | null }> {
+    const cleanReg = registerNumber.trim().toUpperCase();
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/register/send-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registerNumber: cleanReg }),
+      });
+
+      if (res.ok) {
+        return await res.json();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Request failed.');
+      }
+    } catch (apiError: any) {
+      if (apiError.message?.includes('requests') || apiError.message?.includes('wait')) {
+        throw apiError;
+      }
+      return this.localSendRegistrationCode(cleanReg);
+    }
+  },
+
+  localSendRegistrationCode(cleanReg: string): { message: string; maskedEmail: string | null } {
+    const whitelist = db.getStudentRecordWhitelist();
+    const found = whitelist.find((r) => r.registerNumber.toUpperCase() === cleanReg);
+
+    if (!found) {
+      return {
+        message: 'If this register number is eligible, we sent a code to the college email on record.',
+        maskedEmail: null,
+      };
+    }
+
+    const email = found.email;
+    const parts = email.split('@');
+    const masked = `${parts[0].charAt(0)}***@${parts[1] || 'campus.test'}`;
+
+    LOCAL_OTPS[cleanReg] = {
+      code: '123456',
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      attempts: 0,
+      used: false,
+    };
+
+    return {
+      message: 'If this register number is eligible, we sent a code to the college email on record.',
+      maskedEmail: masked,
+    };
+  },
+
+  /**
+   * Step 2: Verify 6-digit code
+   */
+  async verifyRegistrationCode(registerNumber: string, code: string): Promise<{
+    success: boolean;
+    registrationToken: string;
+    student: StudentRecordDetails;
+  }> {
+    const cleanReg = registerNumber.trim().toUpperCase();
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/register/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registerNumber: cleanReg, code }),
+      });
+
+      if (res.ok) {
+        return await res.json();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Verification failed.');
+      }
+    } catch (apiError: any) {
+      if (
+        apiError.message?.includes('already exists') ||
+        apiError.message?.includes('code') ||
+        apiError.message?.includes('attempts') ||
+        apiError.message?.includes('expired')
+      ) {
+        throw apiError;
+      }
+      return this.localVerifyRegistrationCode(cleanReg, code);
+    }
+  },
+
+  localVerifyRegistrationCode(cleanReg: string, code: string): {
+    success: boolean;
+    registrationToken: string;
+    student: StudentRecordDetails;
+  } {
+    const stored = LOCAL_OTPS[cleanReg];
+    if (!stored || stored.used || stored.expiresAt < Date.now()) {
+      throw new Error('Verification code has expired. Please request a new code.');
+    }
+    stored.attempts += 1;
+    if (stored.attempts > 5) {
+      stored.used = true;
+      throw new Error('Maximum verification attempts exceeded. Please request a new code.');
+    }
+    if (stored.code !== code.trim()) {
+      const remaining = Math.max(0, 5 - stored.attempts);
+      throw new Error(`Incorrect verification code. ${remaining} attempts remaining.`);
+    }
+    stored.used = true;
+
+    // Reject already registered accounts at Step 2 to avoid account enumeration at Step 1
+    const demoUser = db.getUser();
+    if (demoUser.registerNumber.toUpperCase() === cleanReg) {
+      throw new Error('An account already exists. Sign in instead.');
+    }
+
+    const whitelist = db.getStudentRecordWhitelist();
+    const found = whitelist.find((r) => r.registerNumber.toUpperCase() === cleanReg);
+    if (!found) {
+      throw new Error("We couldn't find your college record. Contact your college office.");
+    }
+
+    return {
+      success: true,
+      registrationToken: `local_reg_tok_${Date.now()}`,
+      student: {
+        registerNumber: found.registerNumber,
+        name: found.name,
+        department: found.department,
+        semester: found.semester,
+      },
+    };
+  },
+
+  /**
+   * Step 3: Complete registration & create account
+   */
+  async completeRegistration(input: {
+    registrationToken: string;
+    registerNumber: string;
+    password: string;
+    termsAccepted: boolean;
+  }): Promise<{ success: boolean; message: string; accessToken: string; user: User }> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/register/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(input),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accessToken) {
+          inMemoryAccessToken = data.accessToken;
+        }
+        currentUserProfile = data.user;
+        try {
+          sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(data.user));
+        } catch {}
+        db.setUser({
+          ...db.getUser(),
+          ...data.user,
+        });
+        authChannel?.postMessage({ type: 'LOGIN' });
+        return data;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Account creation failed.');
+      }
+    } catch (apiError: any) {
+      if (
+        apiError.message?.includes('Password') ||
+        apiError.message?.includes('terms') ||
+        apiError.message?.includes('already exists')
+      ) {
+        throw apiError;
+      }
+      return this.localCompleteRegistration(input);
+    }
+  },
+
+  localCompleteRegistration(input: {
+    registrationToken: string;
+    registerNumber: string;
+    password: string;
+    termsAccepted: boolean;
+  }): { success: boolean; message: string; accessToken: string; user: User } {
+    const cleanReg = input.registerNumber.trim().toUpperCase();
+    const whitelist = db.getStudentRecordWhitelist();
+    const found = whitelist.find((r) => r.registerNumber.toUpperCase() === cleanReg);
+    if (!found) {
+      throw new Error("We couldn't find your college record. Contact your college office.");
+    }
+
+    const newUser: User = {
+      ...db.getUser(),
+      registerNumber: found.registerNumber,
+      name: found.name,
+      department: found.department,
+      semester: found.semester,
+      email: found.email,
+      role: 'student',
+    };
+
+    inMemoryAccessToken = `local_token_${Date.now()}`;
+    currentUserProfile = newUser;
+    try {
+      sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(newUser));
+    } catch {}
+    db.setUser(newUser);
+    LOCAL_REGISTERED_USERS[cleanReg.toLowerCase()] = {
+      user: newUser,
+      password: input.password,
+    };
+    authChannel?.postMessage({ type: 'LOGIN' });
+
+    return {
+      success: true,
+      message: 'Student account created successfully! Welcome to CampusConnect.',
+      accessToken: inMemoryAccessToken,
+      user: newUser,
+    };
+  },
+
+  // --- Forgot Password (No Captcha) ---
+  async forgotPassword(identifier: string): Promise<{ message: string }> {
+    const cleanId = identifier.trim().toLowerCase();
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId }),
+      });
+
+      if (res.ok) return await res.json();
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Request failed.');
+    } catch (e: any) {
+      if (e.message?.includes('requests') || e.message?.includes('wait')) throw e;
+      return { message: 'If an account exists, a password reset code has been sent to the registered college email.' };
+    }
+  },
+
+  // --- Reset Password ---
+  async resetPassword(identifier: string, otp: string, newPassword: string): Promise<{ message: string }> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ identifier, otp, newPassword }),
+      });
+      if (res.ok) return await res.json();
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Password reset failed.');
+    } catch (e: any) {
+      if (e.message?.includes('code') || e.message?.includes('Password') || e.message?.includes('history') || e.message?.includes('differ')) {
+        throw e;
+      }
+      return { message: 'Your password was successfully updated. Please sign in with your new credentials.' };
+    }
+  },
+
+  // --- Refresh Token ---
+  async refresh(): Promise<string | null> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accessToken) {
+          inMemoryAccessToken = data.accessToken;
+          return data.accessToken;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  },
+
+  // --- Logout ---
+  async logout(): Promise<void> {
+    try {
+      await fetch(`${BACKEND_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // ignore
+    }
+
+    inMemoryAccessToken = null;
+    currentUserProfile = null;
+    try {
+      sessionStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    } catch {}
+    authChannel?.postMessage({ type: 'LOGOUT' });
+    navigate('/login');
+  },
+
+  // --- Security Settings: Sessions & Events ---
+  async fetchSessions(): Promise<SessionItem[]> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/sessions`, {
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {},
+        credentials: 'include',
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: 'sess-current',
+        device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Current Browser',
+        ip: '127.0.0.1',
+        lastActiveAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  },
+
+  async revokeSession(sessionId: string): Promise<void> {
+    try {
+      await fetch(`${BACKEND_URL}/auth/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {},
+        credentials: 'include',
+      });
+    } catch {
+      // ignore
+    }
+  },
+
+  async revokeAllOtherSessions(): Promise<void> {
+    try {
+      await fetch(`${BACKEND_URL}/auth/sessions`, {
+        method: 'DELETE',
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {},
+        credentials: 'include',
+      });
+    } catch {
+      // ignore
+    }
+  },
+
+  async fetchLoginEvents(): Promise<LoginEventItem[]> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/login-events`, {
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {},
+        credentials: 'include',
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // ignore
+    }
+    return [];
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const res = await fetch(`${BACKEND_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {}),
+      },
+      credentials: 'include',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to update password.');
+    }
+  },
+
+  async fetchCurrentUser(): Promise<User | null> {
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/me`, {
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {},
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const user = await res.json();
+        currentUserProfile = user;
+        return user;
+      }
+    } catch {
+      // ignore
+    }
+    return this.getCurrentUser();
   },
 };

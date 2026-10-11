@@ -319,11 +319,23 @@ export const SettingsPage: React.FC = () => {
             5. CHANGE PASSWORD
             ========================================================================= */}
         <form onSubmit={handleChangePassword} className="portal-card p-6 sm:p-8 space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-[var(--app-text-muted)]" />
-            <h3 className="portal-heading text-base text-[var(--app-text)]">
-              Security & Credentials
-            </h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-[var(--app-text-muted)]" />
+              <h3 className="portal-heading text-base text-[var(--app-text)]">
+                Security & Credentials
+              </h3>
+            </div>
+            <a
+              href="/settings/security"
+              onClick={(e) => {
+                e.preventDefault();
+                import('../../utils/navigation').then((m) => m.navigate('/settings/security'));
+              }}
+              className="text-xs font-bold text-amber-500 hover:underline cursor-pointer"
+            >
+              Manage Active Sessions &rarr;
+            </a>
           </div>
 
           {passwordStatus && (

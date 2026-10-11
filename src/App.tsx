@@ -9,6 +9,13 @@ import { authService } from './services/auth';
 // Auth Pages
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { TermsPage } from './pages/TermsPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { IdleTimeoutDialog } from './components/auth/IdleTimeoutDialog';
+import { SecuritySettingsPage } from './pages/portal/SecuritySettingsPage';
 
 // Student Portal Pages
 import { DashboardPage } from './pages/portal/DashboardPage';
@@ -125,18 +132,24 @@ function LandingPage() {
 // Protected Route Guard
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuth = authService.isAuthenticated();
+  const currentPath = useCurrentPath();
 
   useEffect(() => {
     if (!isAuth) {
-      navigate('/login');
+      navigate(`/login?redirect=${encodeURIComponent(currentPath)}`);
     }
-  }, [isAuth]);
+  }, [isAuth, currentPath]);
 
   if (!isAuth) {
     return null;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <IdleTimeoutDialog />
+    </>
+  );
 }
 
 export function App() {
@@ -170,6 +183,26 @@ export function App() {
 
   if (currentPath === '/register' || currentPath === '/signup') {
     return <RegisterPage />;
+  }
+
+  if (currentPath.startsWith('/verify-email')) {
+    return <VerifyEmailPage />;
+  }
+
+  if (currentPath === '/forgot-password') {
+    return <ForgotPasswordPage />;
+  }
+
+  if (currentPath.startsWith('/reset-password')) {
+    return <ResetPasswordPage />;
+  }
+
+  if (currentPath === '/terms') {
+    return <TermsPage />;
+  }
+
+  if (currentPath === '/privacy') {
+    return <PrivacyPage />;
   }
 
   if (currentPath.startsWith('/verify/')) {
@@ -353,6 +386,14 @@ export function App() {
     return (
       <ProtectedRoute>
         <ProfilePage />
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath === '/settings/security') {
+    return (
+      <ProtectedRoute>
+        <SecuritySettingsPage />
       </ProtectedRoute>
     );
   }

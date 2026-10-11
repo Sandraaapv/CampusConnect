@@ -145,3 +145,91 @@ CampusConnect features a complete **Student Portal** (behind the "Sign in" flow)
    - Real-time resolution timeline (`Open` → `Assigned` → `In progress` → `Resolved` → `Closed`) and comment thread.
    - Rate-limited to 5 ticket submissions per day per authenticated student.
    - **Simulated Support**: Automated background technician dispatch simulates assignment and progress updates with canned field remarks for realistic end-to-end demonstration.
+
+---
+
+## End-to-End Student Authentication (React + Spring Boot + MySQL)
+
+CampusConnect features a complete, production-grade **Student-Only Authentication and Security Architecture** complying with institutional privacy standards:
+
+### 1. Architecture & Security Highlights
+
+- **Student-Only Role Enforcement**: Role parameters sent by the client are strictly ignored; every account is hardcoded as a student.
+- **In-Memory JWT Access Tokens**: Access tokens (15-minute lifetime) are held strictly in memory and are never persisted in `localStorage` or `sessionStorage`.
+- **Rotating Refresh Tokens & Reuse Detection**: Refresh tokens (7 days standard, or 30 days with "Keep me signed in") are stored in `httpOnly`, `SameSite=Lax` cookies. If an old token in a family is replayed, the entire token family is immediately revoked.
+- **Captcha on Login Only**: Captcha verification is applied strictly to `/login` to thwart credential-stuffing attacks without adding unnecessary friction to registration or password recovery.
+- **New 3-Step Registration Flow (`/register`)**:
+  1. *Step 1: Find your record*:
+     - Single input: **Register number** (e.g. `21CSC105`, trimmed and uppercased).
+     - Looks up official `student_records` and delivers a 6-digit OTP to the college email on record. Students are never prompted to type their email or institutional domain.
+     - Uniform response shape and timing (~200ms) for known and unknown register numbers: *"If this register number is eligible, we sent a code to the college email on record."* Account existence is not revealed at Step 1 to prevent enumeration.
+  2. *Step 2: Verify*:
+     - 6-digit OTP input with paste support, auto-advance, and `autocomplete="one-time-code"`.
+     - 10-minute expiry, 5 attempts, single-use, 60-second resend cooldown, daily email cap, and SHA-256 hashed database storage.
+     - If an account already exists, rejects after verification: *"An account already exists. Sign in instead."*
+     - If eligible, displays read-only official details (**"Is this you?"**: Student Name, Register Number, Department, Semester) with *"Yes, continue"* and *"Not me"* buttons.
+  3. *Step 3: Create your password*:
+     - Password and confirmation inputs with live strength meter and password policy enforcement.
+     - *"I accept the Terms of Service and Privacy Notice"* checkbox positioned immediately above the *"Create account"* button.
+     - Provisions account with strictly student role (client-supplied roles ignored), marks email verified, sends welcome email, and signs student in.
+- **Abuse Protection**: Rate limits code requests per register number (5/hr) and per IP (20/hr) with generic *"Too many requests, try again later."* Daily cap of 5 emails per address.
+- **Login Field Flexibility**: Field label is *"Register number or college ID"*. An optional `VITE_LOGIN_ID_SUFFIX` configuration renders a non-editable suffix badge (e.g., NetID domain) and defaults to empty.
+
+---
+
+### 2. Demo & Test Data
+
+The system is pre-seeded with realistic student records using the reserved `campus.test` domain:
+
+| Student Register Number | Name | Email | Status / Purpose |
+|---|---|---|---|
+| **`21CS042`** | Arjun Verma | `student.demo@campus.test` | **Pre-registered Demo Account** (Password: `StudentDemo@2026!`). Use for instant demo sign in. |
+| **`21CSC105`** | Ananya Sen | `ananya.sen@campus.test` | **Unregistered Eligible Record**. Use to test the 3-step registration flow. Code visible in Mailpit / server logs. |
+| **`99XYZ999`** | — | — | **Non-existent Register Number**. Used to test neutral Step 1 response without email dispatch. |
+
+---
+
+### 3. Environment Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VITE_ENABLE_DEMO` | `true` | Enables 1-click demo sign in for registered student `21CS042` |
+| `VITE_LOGIN_ID_SUFFIX` | `""` | Optional non-editable suffix pill shown inside the login input (default empty) |
+| `VITE_COLLEGE_EMAIL_DOMAIN` | `campus.test` | Institutional reserved test domain |
+| `VITE_BACKEND_URL` | `http://localhost:8080` | Spring Boot REST API base URL |
+| `COLLEGE_EMAIL_DOMAIN` | `campus.test` | Backend institutional domain |
+| `SPRING_DATASOURCE_URL` | `jdbc:mysql://localhost:3306/campusconnect...` | MySQL connection string (H2 used in test slice) |
+| `SPRING_DATASOURCE_USERNAME` | `campusconnect` | MySQL database user |
+| `SPRING_DATASOURCE_PASSWORD` | `campusconnect_secret` | MySQL database password |
+| `SPRING_MAIL_HOST` | `localhost` | Mailpit / SMTP host (default: `1025`) |
+| `SPRING_MAIL_PORT` | `1025` | Mailpit SMTP port |
+| `JWT_SECRET` | *(256-bit key)* | HMAC-SHA256 signature key |
+
+---
+
+### 4. Running Locally & In Docker
+
+To run MySQL, Mailpit, and the Spring Boot backend locally in Docker:
+
+```bash
+# 1. Start MySQL (port 3306), Mailpit (SMTP 1025, Web UI 8025), and Spring Boot (port 8080)
+docker compose up -d
+
+# 2. Inspect student OTP emails in Mailpit
+# URL: http://localhost:8025/
+
+# 3. Start the React frontend dev server
+npm run dev
+```
+
+---
+
+### 5. Running Tests
+
+```bash
+# Frontend Unit & Integration Tests (Vitest - 49 tests)
+npm test
+
+# Backend Spring Boot Integration Tests (Maven - 9 tests)
+cd backend && ./mvnw test
+```

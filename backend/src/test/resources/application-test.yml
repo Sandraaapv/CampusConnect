@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:campusconnect_test;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  mail:
+    host: localhost
+    port: 1025
+
+campusconnect:
+  college-email-domain: campus.test
+  login-id-suffix: ""
+  frontend-origin: http://localhost:5173
+  mail-from: noreply@campus.test
+  jwt:
+    secret: campusconnect-very-long-secret-key-for-hmac-sha-256-student-portal-2026!
+    access-token-expiration-seconds: 900
+    refresh-token-expiration-days: 7
+    remember-me-refresh-token-days: 30

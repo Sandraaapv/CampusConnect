@@ -1,0 +1,52 @@
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: campusconnect-auth-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/campusconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:campusconnect}
+    password: ${SPRING_DATASOURCE_PASSWORD:campusconnect_secret}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+campusconnect:
+  college-email-domain: ${COLLEGE_EMAIL_DOMAIN:campus.test}
+  login-id-suffix: ${LOGIN_ID_SUFFIX:}
+  frontend-origin: ${FRONTEND_URL:http://localhost:5173}
+  mail-from: ${MAIL_FROM:noreply@campus.test}
+  jwt:
+    secret: ${JWT_SECRET:campusconnect-very-long-secret-key-for-hmac-sha-256-student-portal-2026!}
+    access-token-expiration-seconds: 900 # 15 minutes
+    refresh-token-expiration-days: 7 # 7 days standard
+    remember-me-refresh-token-days: 30 # 30 days keep-me-signed-in
+  security:
+    max-login-attempts: 5
+    lockout-duration-minutes: 15
+    lockout-window-minutes: 15
+    otp-expiration-minutes: 10
+    otp-max-attempts: 5
+    otp-resend-cooldown-seconds: 60
+    otp-daily-max-resends: 5
+    captcha-expiration-seconds: 180 # 3 minutes
