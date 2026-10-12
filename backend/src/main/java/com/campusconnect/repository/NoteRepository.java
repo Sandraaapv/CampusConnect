@@ -9,5 +9,6 @@ import java.util.List;
 @Repository
 public interface NoteRepository extends JpaRepository<Note, String> {
     List<Note> findBySubjectCodeOrderByUpvotesDesc(String subjectCode);
+    List<Note> findBySubjectCode(String subjectCode);
     List<Note> findAllByOrderByUpvotesDesc();
 }

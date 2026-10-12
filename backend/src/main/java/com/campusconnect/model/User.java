@@ -75,6 +75,12 @@ public class User {
 
     public String getRole() { return "ROLE_STUDENT"; }
 
+    public String getName() { return studentRecord != null ? studentRecord.getName() : ""; }
+    public String getRegisterNumber() { return studentRecord != null ? studentRecord.getRegisterNumber() : ""; }
+    public String getDepartment() { return studentRecord != null ? studentRecord.getDepartment() : ""; }
+    public int getSemester() { return studentRecord != null ? studentRecord.getSemester() : 6; }
+    public String getAvatarUrl() { return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256"; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

@@ -81,85 +81,141 @@ export const api = {
 
   // --- Student Settings Endpoints (GET / PUT /settings) ---
   async getSettings() {
-    return db.getUser().settings;
+    if (USE_MOCK_API) return db.getUser().settings;
+    return request<any>('/settings');
   },
 
   async updateSettings(updates: Partial<User['settings']>) {
-    return db.updateUserSettings(updates);
+    if (USE_MOCK_API) return db.updateUserSettings(updates);
+    return request<any>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
   },
 
   // --- Syllabus Endpoints (GET /syllabus/units, PUT /syllabus/progress) ---
   async getSyllabusUnits() {
-    return db.getSyllabusUnits();
+    if (USE_MOCK_API) return db.getSyllabusUnits();
+    return request<any[]>('/syllabus/units');
   },
 
   async getUnitProgress() {
-    return db.getUnitProgress();
+    if (USE_MOCK_API) return db.getUnitProgress();
+    return request<Record<string, boolean>>('/syllabus/progress');
   },
 
   async updateUnitProgress(unitId: string) {
-    return db.toggleUnitProgress(unitId);
+    if (USE_MOCK_API) return db.toggleUnitProgress(unitId);
+    return request<any>('/syllabus/progress', {
+      method: 'PUT',
+      body: JSON.stringify({ unitId }),
+    });
   },
 
   // --- Exams & Study Planner Endpoints (GET /exams, GET /exams/plan) ---
   async getExams() {
-    return db.getExams();
+    if (USE_MOCK_API) return db.getExams();
+    return request<any[]>('/exams');
+  },
+
+  async createExam(exam: any) {
+    if (USE_MOCK_API) return exam;
+    return request<any>('/exams', {
+      method: 'POST',
+      body: JSON.stringify(exam),
+    });
   },
 
   async getExamPlan(dailyHours?: number) {
-    return db.getStudyPlan(dailyHours);
+    if (USE_MOCK_API) return db.getStudyPlan(dailyHours);
+    const qs = dailyHours ? `?dailyHours=${dailyHours}` : '';
+    return request<any>(`/exams/plan${qs}`);
   },
 
   // --- Badges, Streak, Wrapped ---
   async getBadges() {
-    return db.getBadges();
+    if (USE_MOCK_API) return db.getBadges();
+    return request<any[]>('/badges');
   },
 
   async getStreak() {
-    return db.getStreak();
+    if (USE_MOCK_API) return db.getStreak();
+    return request<any>('/streak');
   },
 
   async getWrapped() {
-    return {
-      studentName: db.getUser().name,
-      department: db.getUser().department,
-      semester: db.getUser().semester,
-      bestSubject: 'Database Management Systems (90.0% Attendance, 49/50 Internals)',
-      longestStreak: '18 Days Active',
-      mostImprovedSubject: 'Cloud Computing & DevOps (+12% improvement)',
-      totalClassesAttended: 161,
-      totalClassesHeld: 192,
-      overallPercent: '83.8%',
-      badgesEarnedCount: db.getBadges().filter((b) => b.unlocked).length,
-    };
+    if (USE_MOCK_API) {
+      return {
+        studentName: db.getUser().name,
+        department: db.getUser().department,
+        semester: db.getUser().semester,
+        bestSubject: 'Database Management Systems (90.0% Attendance, 49/50 Internals)',
+        longestStreak: '18 Days Active',
+        mostImprovedSubject: 'Cloud Computing & DevOps (+12% improvement)',
+        totalClassesAttended: 161,
+        totalClassesHeld: 192,
+        overallPercent: '83.8%',
+        badgesEarnedCount: db.getBadges().filter((b) => b.unlocked).length,
+      };
+    }
+    return request<any>('/wrapped');
   },
 
   // --- Digital ID Card & Verification ---
   async getIdCardData() {
-    const user = db.getUser();
-    return {
-      user,
-      verificationToken: `cc_id_sig_${user.registerNumber}_2026`,
-      issuedDate: 'August 2026',
-      validUntil: 'July 2027',
-    };
+    if (USE_MOCK_API) {
+      const user = db.getUser();
+      return {
+        user,
+        verificationToken: `cc_id_sig_${user.registerNumber}_2026`,
+        issuedDate: 'August 2026',
+        validUntil: 'July 2027',
+      };
+    }
+    return request<any>('/id-card');
   },
 
   async verifyIdToken(token: string) {
-    const user = db.getUser();
-    if (token.includes(user.registerNumber) || token.startsWith('cc_id_sig_')) {
-      return {
-        valid: true,
-        student: {
-          name: user.name,
-          registerNumber: user.registerNumber,
-          department: user.department,
-          semester: user.semester,
-          avatarUrl: user.avatarUrl,
-        },
-      };
+    if (USE_MOCK_API) {
+      const user = db.getUser();
+      if (token.includes(user.registerNumber) || token.startsWith('cc_id_sig_')) {
+        return {
+          valid: true,
+          student: {
+            name: user.name,
+            registerNumber: user.registerNumber,
+            department: user.department,
+            semester: user.semester,
+            avatarUrl: user.avatarUrl,
+          },
+        };
+      }
+      return { valid: false };
     }
-    return { valid: false };
+    const res = await fetch(`${BACKEND_URL}/id-card/verify/${encodeURIComponent(token)}`);
+    return res.json();
+  },
+
+  // --- Notes Endpoints ---
+  async getNotes(subjectCode?: string) {
+    if (USE_MOCK_API) return db.getNotes(subjectCode);
+    const qs = subjectCode && subjectCode !== 'All' ? `?subjectCode=${encodeURIComponent(subjectCode)}` : '';
+    return request<any[]>(`/notes${qs}`);
+  },
+
+  async addNote(note: any) {
+    if (USE_MOCK_API) return db.addNote(note);
+    return request<any>('/notes', {
+      method: 'POST',
+      body: JSON.stringify(note),
+    });
+  },
+
+  async upvoteNote(id: string) {
+    if (USE_MOCK_API) return db.upvoteNote(id);
+    return request<any>(`/notes/${id}/upvote`, {
+      method: 'POST',
+    });
   },
 
   // --- Notifications ---

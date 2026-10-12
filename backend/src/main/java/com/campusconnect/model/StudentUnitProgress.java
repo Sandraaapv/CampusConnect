@@ -49,6 +49,12 @@ public class StudentUnitProgress {
         this.updatedAt = LocalDateTime.now();
     }
 
+    public boolean isCompleted() { return covered; }
+    public void setCompleted(boolean completed) {
+        this.covered = completed;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

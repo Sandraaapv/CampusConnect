@@ -33,6 +33,13 @@ public class StudentBadge {
         this.unlockedAt = unlockedAt;
     }
 
+    public StudentBadge(String studentId, String badgeId, String unlockedAt) {
+        this.studentId = studentId;
+        this.badgeId = badgeId;
+        this.unlocked = true;
+        this.unlockedAt = unlockedAt;
+    }
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
