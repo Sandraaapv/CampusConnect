@@ -13,7 +13,9 @@ export const IS_DEMO_ENABLED =
   import.meta.env.VITE_ENABLE_DEMO !== false;
 
 export const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+  import.meta.env.VITE_BACKEND_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://localhost:8080';
 
 // In-memory access token (NEVER persisted in localStorage or sessionStorage)
 let inMemoryAccessToken: string | null = null;
