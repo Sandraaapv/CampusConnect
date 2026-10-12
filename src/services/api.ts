@@ -3,9 +3,32 @@
 // Backed by client data store so screens stay 100% decouple from the backend implementation.
 
 import { db } from './db';
-import type { User, AttendanceRecord, MarkRecord, Notification } from './db';
-import { authService } from './auth';
+import type { User, AttendanceRecord, MarkRecord, Notification, RequestItem, Circular } from './db';
+import { authService, BACKEND_URL } from './auth';
 import type { RegisterInput, LoginInput } from './auth';
+
+export const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true' || import.meta.env.VITE_USE_MOCK_API === true;
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = authService.getAccessToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${BACKEND_URL}${endpoint}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Request failed with status ${res.status}`);
+  }
+  return res.json();
+}
 
 export const api = {
   // --- Auth Endpoints ---
@@ -23,28 +46,37 @@ export const api = {
 
   // --- Attendance Endpoints (Read-Only from College Records) ---
   async getAttendance(): Promise<AttendanceRecord[]> {
-    return db.getAttendance();
+    if (USE_MOCK_API) return db.getAttendance();
+    return request<AttendanceRecord[]>('/attendance');
   },
 
   async getAttendanceSummary() {
-    return db.getAttendanceSummary();
+    if (USE_MOCK_API) return db.getAttendanceSummary();
+    return request<any>('/attendance/summary');
   },
 
   // --- Marks & CGPA Endpoints (Read-Only from College Records) ---
   async getMarks(): Promise<MarkRecord[]> {
-    return db.getMarks();
+    if (USE_MOCK_API) return db.getMarks();
+    return request<MarkRecord[]>('/marks');
   },
 
   async predictMarks(targetCgpa: number) {
-    return db.predictEndSemMarks(targetCgpa);
+    if (USE_MOCK_API) return db.predictEndSemMarks(targetCgpa);
+    return request<any>('/marks/predict', {
+      method: 'POST',
+      body: JSON.stringify({ targetCgpa }),
+    });
   },
 
   async getAcademicHistory() {
-    return db.getAcademicHistory();
+    if (USE_MOCK_API) return db.getAcademicHistory();
+    return request<any>('/marks/history');
   },
 
   async getCumulativeCgpa() {
-    return db.getCumulativeCgpa();
+    if (USE_MOCK_API) return db.getCumulativeCgpa();
+    return request<any>('/marks/cumulative-cgpa');
   },
 
   // --- Student Settings Endpoints (GET / PUT /settings) ---
@@ -132,22 +164,69 @@ export const api = {
 
   // --- Notifications ---
   async getNotifications(): Promise<Notification[]> {
-    return db.getNotifications();
+    if (USE_MOCK_API) return db.getNotifications();
+    return request<Notification[]>('/notifications');
   },
 
   async markNotificationRead(id: string) {
-    db.markNotificationAsRead(id);
-    return { success: true };
+    if (USE_MOCK_API) {
+      db.markNotificationAsRead(id);
+      return { success: true };
+    }
+    return request<any>(`/notifications/${id}/read`, { method: 'PATCH' });
   },
 
   async markAllNotificationsRead() {
-    db.markAllNotificationsAsRead();
-    return { success: true };
+    if (USE_MOCK_API) {
+      db.markAllNotificationsAsRead();
+      return { success: true };
+    }
+    return request<any>('/notifications/read-all', { method: 'PATCH' });
+  },
+
+  // --- Requests Endpoints ---
+  async getRequests(): Promise<RequestItem[]> {
+    if (USE_MOCK_API) return db.getRequests();
+    return request<RequestItem[]>('/requests');
+  },
+
+  async getRequestById(id: string): Promise<RequestItem | undefined> {
+    if (USE_MOCK_API) return db.getRequestById(id);
+    return request<RequestItem>(`/requests/${id}`);
+  },
+
+  async createRequest(input: any): Promise<RequestItem> {
+    if (USE_MOCK_API) return db.createRequest(input);
+    return request<RequestItem>('/requests', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  async downloadRequestDocument(id: string): Promise<Blob> {
+    const token = authService.getAccessToken();
+    const res = await fetch(`${BACKEND_URL}/requests/${id}/document`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to download clearance certificate');
+    return res.blob();
+  },
+
+  // --- Circulars Endpoints ---
+  async getCirculars(searchQuery?: string, category?: string): Promise<Circular[]> {
+    if (USE_MOCK_API) return db.getCirculars(searchQuery, category);
+    const params = new URLSearchParams();
+    if (searchQuery) params.append('q', searchQuery);
+    if (category && category !== 'All') params.append('dept', category);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<Circular[]>(`/circulars${qs}`);
   },
 
   // --- Dashboard Aggregated ---
   async getDashboard() {
-    return db.getDashboardData();
+    if (USE_MOCK_API) return db.getDashboardData();
+    return request<any>('/dashboard');
   },
 
   // --- Timetable Endpoints (Read-Only College Records) ---

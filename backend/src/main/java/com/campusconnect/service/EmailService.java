@@ -96,6 +96,22 @@ public class EmailService {
         sendHtmlEmail(toEmail, subject, htmlBody);
     }
 
+    @Async
+    public void sendRequestStatusChangeAlert(String toEmail, String studentName, String requestId, String requestType, String newStatus, String comment) {
+        log.info("==================================================================");
+        log.info("📋 [REQUEST STATUS UPDATE] To: {} | Request: {} ({}) -> Status: {}", toEmail, requestId, requestType, newStatus);
+        log.info("==================================================================");
+        String subject = "CampusConnect — Request Update: " + requestType + " is now " + newStatus;
+        String htmlBody = buildEmailTemplate(
+                "Request Status Update",
+                "Hi " + escapeHtml(studentName) + ",",
+                "Your request for <strong>" + escapeHtml(requestType) + "</strong> (" + escapeHtml(requestId) + ") has progressed to <strong>" + escapeHtml(newStatus) + "</strong>.<br/><br/><em>" + escapeHtml(comment) + "</em>",
+                newStatus.toUpperCase(),
+                "Log in to your CampusConnect student portal to view the full clearance trail and download verified documents."
+        );
+        sendHtmlEmail(toEmail, subject, htmlBody);
+    }
+
     private void sendHtmlEmail(String toEmail, String subject, String htmlContent) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
