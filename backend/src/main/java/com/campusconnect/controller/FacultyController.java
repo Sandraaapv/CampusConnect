@@ -1,6 +1,7 @@
 package com.campusconnect.controller;
 
 import com.campusconnect.dto.FacultyDto;
+import com.campusconnect.model.User;
 import com.campusconnect.service.FacultyService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -18,6 +19,15 @@ public class FacultyController {
         this.facultyService = facultyService;
     }
 
+    private String getStudentId(Authentication authentication) {
+        if (authentication == null) return null;
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User user) {
+            return user.getId();
+        }
+        return principal != null ? principal.toString() : null;
+    }
+
     @GetMapping
     public ResponseEntity<List<FacultyDto>> getFaculty() {
         return ResponseEntity.ok(facultyService.getAllFaculty());
@@ -25,7 +35,7 @@ public class FacultyController {
 
     @GetMapping("/my")
     public ResponseEntity<List<FacultyDto>> getMyFaculty(Authentication authentication) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         return ResponseEntity.ok(facultyService.getMyFaculty(studentId));
     }
 

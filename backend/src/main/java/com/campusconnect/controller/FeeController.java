@@ -3,6 +3,7 @@ package com.campusconnect.controller;
 import com.campusconnect.dto.FeeStatusSummaryDto;
 import com.campusconnect.model.FeePayment;
 import com.campusconnect.model.FeeReceipt;
+import com.campusconnect.model.User;
 import com.campusconnect.service.FeeService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -21,11 +22,20 @@ public class FeeController {
         this.feeService = feeService;
     }
 
+    private String getStudentId(Authentication authentication) {
+        if (authentication == null) return null;
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User user) {
+            return user.getId();
+        }
+        return principal != null ? principal.toString() : null;
+    }
+
     @GetMapping
     public ResponseEntity<FeeStatusSummaryDto> getFees(
             Authentication authentication,
             @RequestParam(required = false) Integer semester) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         return ResponseEntity.ok(feeService.getFeeStatusSummary(studentId, semester));
     }
 
@@ -33,7 +43,7 @@ public class FeeController {
     public ResponseEntity<List<FeePayment>> getFeePayments(
             Authentication authentication,
             @RequestParam(required = false) Integer semester) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         return ResponseEntity.ok(feeService.getFeePayments(studentId, semester));
     }
 
@@ -41,7 +51,7 @@ public class FeeController {
     public ResponseEntity<FeeReceipt> getReceipt(
             Authentication authentication,
             @PathVariable String id) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         FeeReceipt receipt = feeService.getReceiptById(studentId, id);
         if (receipt == null) {
             return ResponseEntity.notFound().build();
@@ -65,7 +75,7 @@ public class FeeController {
     public ResponseEntity<Map<String, Object>> payFees(
             Authentication authentication,
             @RequestBody PayFeeRequest req) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         Map<String, Object> result = feeService.payFees(
                 studentId, req.semester, req.mode, req.idempotencyKey, req.cardNumber
         );

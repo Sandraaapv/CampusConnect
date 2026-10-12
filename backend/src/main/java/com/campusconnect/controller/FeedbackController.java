@@ -2,6 +2,7 @@ package com.campusconnect.controller;
 
 import com.campusconnect.model.FeedbackForm;
 import com.campusconnect.model.FeedbackQuestion;
+import com.campusconnect.model.User;
 import com.campusconnect.service.FeedbackService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,9 +21,18 @@ public class FeedbackController {
         this.feedbackService = feedbackService;
     }
 
+    private String getStudentId(Authentication authentication) {
+        if (authentication == null) return null;
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User user) {
+            return user.getId();
+        }
+        return principal != null ? principal.toString() : null;
+    }
+
     @GetMapping("/forms")
     public ResponseEntity<List<FeedbackForm>> getFeedbackForms(Authentication authentication) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         return ResponseEntity.ok(feedbackService.getFormsForStudent(studentId));
     }
 
@@ -41,7 +51,7 @@ public class FeedbackController {
     public ResponseEntity<Map<String, Object>> submitFeedback(
             Authentication authentication,
             @RequestBody FeedbackSubmitRequest req) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         Map<String, Object> result = feedbackService.submitFeedback(studentId, req.formId, req.answers, req.comment);
         return ResponseEntity.ok(result);
     }

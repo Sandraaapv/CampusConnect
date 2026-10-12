@@ -1,6 +1,7 @@
 package com.campusconnect.controller;
 
 import com.campusconnect.model.HelpdeskTicket;
+import com.campusconnect.model.User;
 import com.campusconnect.service.HelpdeskService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -19,15 +20,24 @@ public class HelpdeskController {
         this.helpdeskService = helpdeskService;
     }
 
+    private String getStudentId(Authentication authentication) {
+        if (authentication == null) return null;
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User user) {
+            return user.getId();
+        }
+        return principal != null ? principal.toString() : null;
+    }
+
     @GetMapping
     public ResponseEntity<List<HelpdeskTicket>> getTickets(Authentication authentication) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         return ResponseEntity.ok(helpdeskService.getTicketsForStudent(studentId));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getTicketById(Authentication authentication, @PathVariable String id) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         Map<String, Object> data = helpdeskService.getTicketById(studentId, id);
         if (data == null) {
             return ResponseEntity.notFound().build();
@@ -47,7 +57,7 @@ public class HelpdeskController {
     public ResponseEntity<Map<String, Object>> createTicket(
             Authentication authentication,
             @RequestBody CreateTicketRequest req) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         Map<String, Object> result = helpdeskService.createTicket(
                 studentId, req.category, req.priority, req.title, req.description, req.location
         );
@@ -63,7 +73,7 @@ public class HelpdeskController {
             Authentication authentication,
             @PathVariable String id,
             @RequestBody CommentRequest req) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         Map<String, Object> result = helpdeskService.addComment(studentId, id, req.message);
         return ResponseEntity.ok(result);
     }
@@ -78,7 +88,7 @@ public class HelpdeskController {
             Authentication authentication,
             @PathVariable String id,
             @RequestBody UpdateTicketRequest req) {
-        String studentId = (String) authentication.getPrincipal();
+        String studentId = getStudentId(authentication);
         Map<String, Object> result = helpdeskService.updateTicket(studentId, id, req.action, req.rating);
         return ResponseEntity.ok(result);
     }

@@ -8,8 +8,8 @@ spring:
     name: campusconnect-auth-service
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/campusconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${SPRING_DATASOURCE_USERNAME:campusconnect}
-    password: ${SPRING_DATASOURCE_PASSWORD:campusconnect_secret}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:Sandra@2005}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
