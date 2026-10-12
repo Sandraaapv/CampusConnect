@@ -287,7 +287,8 @@ export const api = {
 
   // --- Timetable Endpoints (Read-Only College Records) ---
   async getTimetable() {
-    return db.getTimetableSlots();
+    if (USE_MOCK_API) return db.getTimetableSlots();
+    return request<any[]>('/timetable');
   },
 
   async getTodayTimetable(dayOverride?: any) {
@@ -299,69 +300,95 @@ export const api = {
   },
 
   async getTimetableIcs() {
-    return db.getTimetableIcs();
+    if (USE_MOCK_API) return db.getTimetableIcs();
+    const token = authService.getAccessToken();
+    const res = await fetch(`${BACKEND_URL}/timetable/ics`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    return res.text();
   },
 
-  // --- Fees Endpoints (Read-Only College Records) ---
+  // --- Fees Endpoints (Read-Only College Records with server-side rules) ---
   async getFees(semester?: number) {
-    return db.getFeeStatusSummary(semester);
+    if (USE_MOCK_API) return db.getFeeStatusSummary(semester);
+    const qs = semester ? `?semester=${semester}` : '';
+    return request<any>(`/fees${qs}`);
   },
 
   async getFeePayments(semester?: number) {
-    return db.getFeePayments(semester);
+    if (USE_MOCK_API) return db.getFeePayments(semester);
+    const qs = semester ? `?semester=${semester}` : '';
+    return request<any[]>(`/fees/payments${qs}`);
   },
 
   async getFeeReceipt(id: string) {
-    return db.getFeeReceiptById(id);
+    if (USE_MOCK_API) return db.getFeeReceiptById(id);
+    return request<any>(`/fees/receipts/${id}`);
   },
 
   async verifyReceiptToken(token: string) {
-    const receipt = db.getFeeReceiptByToken(token);
-    if (!receipt) return { valid: false };
-    return {
-      valid: true,
-      receipt,
-      student: {
-        name: db.getUser().name,
-        registerNumber: db.getUser().registerNumber,
-        department: db.getUser().department,
-      },
-    };
+    if (USE_MOCK_API) {
+      const receipt = db.getFeeReceiptByToken(token);
+      if (!receipt) return { valid: false };
+      return {
+        valid: true,
+        receipt,
+        student: {
+          name: db.getUser().name,
+          registerNumber: db.getUser().registerNumber,
+          department: db.getUser().department,
+        },
+      };
+    }
+    const res = await fetch(`${BACKEND_URL}/fees/receipts/verify/${encodeURIComponent(token)}`);
+    return res.json();
   },
 
   // --- Faculty Directory Endpoints (Read-Only College Records) ---
   async getFaculty() {
-    return db.getFacultyList();
+    if (USE_MOCK_API) return db.getFacultyList();
+    return request<any[]>('/faculty');
   },
 
   async getMyFaculty() {
-    return db.getMyFaculty();
+    if (USE_MOCK_API) return db.getMyFaculty();
+    return request<any[]>('/faculty/my');
   },
 
   async getFacultyById(id: string) {
-    return db.getFacultyById(id);
+    if (USE_MOCK_API) return db.getFacultyById(id);
+    return request<any>(`/faculty/${id}`);
   },
 
   // --- Course Feedback Endpoints (Anonymity by Design) ---
   async getFeedbackForms() {
-    return db.getFeedbackForms();
+    if (USE_MOCK_API) return db.getFeedbackForms();
+    return request<any[]>('/feedback/forms');
   },
 
   async getFeedbackQuestions() {
-    return db.getFeedbackQuestions();
+    if (USE_MOCK_API) return db.getFeedbackQuestions();
+    return request<any[]>('/feedback/questions');
   },
 
   async submitFeedback(formId: string, answers: Record<string, number>, comment?: string) {
-    return db.submitFeedback(formId, answers, comment);
+    if (USE_MOCK_API) return db.submitFeedback(formId, answers, comment);
+    return request<any>('/feedback/submit', {
+      method: 'POST',
+      body: JSON.stringify({ formId, answers, comment }),
+    });
   },
 
   // --- Helpdesk Endpoints (Student Issue Tracking & Simulated Support) ---
   async getHelpdeskTickets() {
-    return db.getHelpdeskTickets();
+    if (USE_MOCK_API) return db.getHelpdeskTickets();
+    return request<any[]>('/helpdesk');
   },
 
   async getHelpdeskTicket(id: string) {
-    return db.getHelpdeskTicketById(id);
+    if (USE_MOCK_API) return db.getHelpdeskTicketById(id);
+    return request<any>(`/helpdesk/${id}`);
   },
 
   async createHelpdeskTicket(input: {
@@ -372,14 +399,26 @@ export const api = {
     location: string;
     attachments?: any[];
   }) {
-    return db.createHelpdeskTicket(input);
+    if (USE_MOCK_API) return db.createHelpdeskTicket(input);
+    return request<any>('/helpdesk', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
 
   async addHelpdeskComment(ticketId: string, message: string) {
-    return db.addHelpdeskComment(ticketId, message);
+    if (USE_MOCK_API) return db.addHelpdeskComment(ticketId, message);
+    return request<any>(`/helpdesk/${ticketId}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
   },
 
   async updateHelpdeskTicket(ticketId: string, action: 'reopen' | 'close', rating?: number) {
-    return db.updateHelpdeskTicket(ticketId, action, rating);
+    if (USE_MOCK_API) return db.updateHelpdeskTicket(ticketId, action, rating);
+    return request<any>(`/helpdesk/${ticketId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action, rating }),
+    });
   },
 };

@@ -87,7 +87,8 @@ public class SecurityConfig {
                                 "/auth/logout",
                                 "/auth/config",
                                 "/id-card/verify/**",
-                                "/fees/verify/**"
+                                "/fees/verify/**",
+                                "/fees/receipts/verify/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
