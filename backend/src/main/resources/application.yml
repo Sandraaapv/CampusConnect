@@ -11,6 +11,9 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:campusconnect}
     password: ${SPRING_DATASOURCE_PASSWORD:campusconnect_secret}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
   jpa:
     hibernate:
       ddl-auto: update
