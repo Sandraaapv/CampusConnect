@@ -26,12 +26,15 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final String frontendOrigin;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthFilter,
+            RateLimitingFilter rateLimitingFilter,
             @Value("${campusconnect.frontend-origin:http://localhost:5173}") String frontendOrigin) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
         this.frontendOrigin = frontendOrigin;
     }
 
@@ -92,6 +95,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
