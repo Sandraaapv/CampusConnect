@@ -22,6 +22,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...options,
     headers,
     credentials: 'include',
+    signal: options.signal || AbortSignal.timeout(3500),
   });
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));

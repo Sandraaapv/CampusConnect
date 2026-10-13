@@ -175,7 +175,9 @@ export const authService = {
   // --- Captcha Generation (Strictly on /login only) ---
   async getCaptcha(): Promise<CaptchaData> {
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/captcha`);
+      const res = await fetch(`${BACKEND_URL}/auth/captcha`, {
+        signal: AbortSignal.timeout(2000),
+      });
       if (res.ok) {
         return await res.json();
       }
@@ -187,7 +189,9 @@ export const authService = {
 
   async getCaptchaAudio(captchaId: string): Promise<string> {
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/captcha/${captchaId}/audio`);
+      const res = await fetch(`${BACKEND_URL}/auth/captcha/${captchaId}/audio`, {
+        signal: AbortSignal.timeout(2500),
+      });
       if (res.ok) {
         const blob = await res.blob();
         return URL.createObjectURL(blob);
@@ -326,6 +330,7 @@ export const authService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        signal: AbortSignal.timeout(3000),
         body: JSON.stringify({
           identifier: cleanId,
           password: input.password,
