@@ -14,6 +14,7 @@ export const LoginPage: React.FC = () => {
   const [captchaAnswer, setCaptchaAnswer] = useState('');
   const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
@@ -22,7 +23,8 @@ export const LoginPage: React.FC = () => {
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const captchaInputRef = useRef<HTMLInputElement>(null);
 
-  const redirectTarget = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+  const rawRedirect = new URLSearchParams(window.location.search).get('redirect');
+  const redirectTarget = rawRedirect && rawRedirect !== '/login' && !rawRedirect.includes('/login') ? rawRedirect : '/dashboard';
 
   // Check URL query params for registration success notice
   const [successMsg] = useState<string | null>(() => {
@@ -115,14 +117,20 @@ export const LoginPage: React.FC = () => {
 
   const handleDemoLogin = async () => {
     try {
-      setLoading(true);
+      setDemoLoading(true);
       setError(null);
       await authService.loginAsDemo();
       navigate(redirectTarget);
+      // Fallback reload navigation if still on /login
+      setTimeout(() => {
+        if (window.location.pathname === '/login') {
+          window.location.href = redirectTarget;
+        }
+      }, 100);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Demo sign in failed.');
     } finally {
-      setLoading(false);
+      setDemoLoading(false);
     }
   };
 
@@ -312,11 +320,15 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full py-2.5 px-4 rounded-full border border-[var(--app-border)] hover:bg-[var(--app-surface-subtle)] text-xs font-bold text-[var(--app-text)] transition flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+            disabled={loading || demoLoading}
+            className="w-full py-2.5 px-4 rounded-full border border-[var(--app-border)] hover:bg-[var(--app-surface-subtle)] text-xs font-bold text-[var(--app-text)] transition flex items-center justify-center gap-2 cursor-pointer min-h-[44px] disabled:opacity-50"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Try the demo</span>
+            {demoLoading ? (
+              <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            )}
+            <span>{demoLoading ? 'Signing into demo...' : 'Try the demo'}</span>
           </button>
           <p className="text-[11px] text-[var(--app-text-muted)] mt-1.5 font-medium">
             Instant evaluation login as seeded student Aarav Sharma (21CS042)

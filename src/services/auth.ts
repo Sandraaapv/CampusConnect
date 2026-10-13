@@ -346,16 +346,17 @@ export const authService = {
         if (data.accessToken) {
           inMemoryAccessToken = data.accessToken;
         }
-        currentUserProfile = data.user;
+        const targetUser = data.user || db.getUser();
+        currentUserProfile = targetUser;
         try {
-          sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(data.user));
+          sessionStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(targetUser));
         } catch {}
         db.setUser({
           ...db.getUser(),
-          ...data.user,
+          ...targetUser,
         });
         authChannel?.postMessage({ type: 'LOGIN' });
-        return { user: data.user, accessToken: data.accessToken, emailVerified: data.emailVerified };
+        return { user: targetUser, accessToken: data.accessToken, emailVerified: data.emailVerified ?? true };
       } else {
         const err = await res.json().catch(() => ({}));
         if (res.status === 423) {
